@@ -1,0 +1,15 @@
+{
+  "_class": "hudson.model.FreeStyleProject",
+  "allBuilds": [
+    {
+      "_class": "hudson.model.FreeStyleBuild",
+      "number": 7,
+      "url": "https://jenkins.example/job/folder/job/legacy-freestyle/7/",
+      "timestamp": 1713956900000,
+      "duration": 25000,
+      "building": false,
+      "inProgress": false,
+      "result": "SUCCESS"
+    }
+  ]
+}

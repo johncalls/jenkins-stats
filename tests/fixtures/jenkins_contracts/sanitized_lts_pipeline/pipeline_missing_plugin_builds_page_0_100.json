@@ -1,0 +1,15 @@
+{
+  "_class": "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+  "allBuilds": [
+    {
+      "_class": "org.jenkinsci.plugins.workflow.job.WorkflowRun",
+      "number": 43,
+      "url": "https://jenkins.example/job/folder/job/pipeline-main/43/",
+      "timestamp": 1713959000000,
+      "duration": 1000,
+      "building": false,
+      "inProgress": false,
+      "result": "FAILURE"
+    }
+  ]
+}

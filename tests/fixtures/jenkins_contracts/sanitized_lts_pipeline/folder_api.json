@@ -1,0 +1,15 @@
+{
+  "_class": "com.cloudbees.hudson.plugins.folder.Folder",
+  "jobs": [
+    {
+      "_class": "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+      "name": "pipeline-main",
+      "url": "https://jenkins.example/job/folder/job/pipeline-main/"
+    },
+    {
+      "_class": "hudson.model.FreeStyleProject",
+      "name": "legacy-freestyle",
+      "url": "https://jenkins.example/job/folder/job/legacy-freestyle/"
+    }
+  ]
+}

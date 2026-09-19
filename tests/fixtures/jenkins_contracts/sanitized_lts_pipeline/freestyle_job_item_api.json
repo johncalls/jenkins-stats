@@ -1,0 +1,7 @@
+{
+  "_class": "hudson.model.FreeStyleProject",
+  "fullName": "folder/legacy-freestyle",
+  "displayName": "Legacy Freestyle",
+  "url": "https://jenkins.example/job/folder/job/legacy-freestyle/",
+  "builds": []
+}

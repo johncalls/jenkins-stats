@@ -1,0 +1,121 @@
+# jenkins-stats
+
+Tools for collecting and analyzing Jenkins build statistics. The package includes typed Pydantic domain models, a read-only Jenkins JSON client, and SQLite persistence for collected jobs and builds.
+
+## Usage
+
+From this checkout, run the installed console script through `uv`:
+
+```bash
+uv run jenkins-stats --help
+```
+
+The CLI has one top-level workflow:
+
+```text
+jenkins-stats collect [connection options] {all,jobs,builds} [target options]
+```
+
+Connection options must appear before the collection target. They can be passed
+as flags or environment variables:
+
+```bash
+export JENKINS_URL=https://jenkins.example.com/
+export JENKINS_USERNAME=api-user
+export JENKINS_API_TOKEN=api-token
+
+uv run jenkins-stats collect --db ./jenkins.sqlite all --lookback 6h
+```
+
+Common connection options:
+
+- `--url` / `--jenkins-url` or `JENKINS_URL`
+- `--username` or `JENKINS_USERNAME`
+- `--api-token` or `JENKINS_API_TOKEN`
+- `--db` / `--database` (default: `./jenkins.sqlite`)
+- `--timeout` in seconds (default: `30`)
+
+Collection targets:
+
+```bash
+# Discover visible jobs and collect their builds.
+uv run jenkins-stats collect all --lookback 6h
+
+# Discover visible jobs only; no build endpoints are requested.
+uv run jenkins-stats collect jobs
+
+# Collect builds for one job already stored by `collect jobs` or `collect all`.
+uv run jenkins-stats collect builds "folder/deploy-main" --since 2024-01-01T00:00:00Z
+```
+
+`all` and `builds` accept:
+
+- `--lookback DURATION`, using `ms`, `s`, `m`, `h`, or `d` units; bare numbers
+  are seconds. The default is `1d`.
+- `--since DATETIME`, an inclusive completion-time cutoff. It must be a
+  timezone-aware ISO timestamp; `Z` is accepted for UTC.
+- `--page-size N`, the Jenkins retained-build page size (default: `100`).
+
+`--since` and `--lookback` are mutually exclusive. Use `--since` when you need a
+fixed cutoff shared across a multi-job run; relative lookbacks are resolved while
+jobs are being scanned.
+
+### Operational prerequisites
+
+Before running against a controller, confirm that:
+
+- the Jenkins base URL is the HTTPS controller URL, including any context path,
+  with no embedded credentials, query, or fragment. The CLI has no insecure-HTTP
+  flag; plain HTTP is only available to library users who explicitly construct
+  `HttpJsonTransport(..., allow_insecure=True)` for trusted local/test use;
+- the controller/proxy serves JSON API responses directly. Redirects, including
+  login redirects, are rejected before the redirect target is opened;
+- the API user can authenticate with a username and API token and has read
+  visibility for the controller root, folders/containers, job `api/json` build
+  metadata, and Pipeline `wfapi/describe` timing endpoints. Hidden jobs are not
+  returned, and permission failures abort collection. The client only uses GET
+  requests, so no Jenkins CSRF crumb is required;
+- build collection is intended for Pipeline jobs. Job discovery can see folders,
+  multibranch projects, and non-Pipeline jobs, but build collection only supports
+  Pipeline runs because actual executor start time is read from the Pipeline REST
+  API plugin. A visible non-Pipeline completed build will abort `collect all`;
+- the Pipeline REST API plugin is installed and each collected Pipeline run has a
+  readable `wfapi/describe` endpoint with `startTimeMillis`;
+- the SQLite path is writable and scoped to one Jenkins controller/base URL. The
+  current schema does not isolate multiple controllers, so reusing the same
+  database for another controller can mix or overwrite rows with matching job
+  names and build numbers;
+- existing databases were created with the current compatible schema. If an old
+  pre-release database fails build upserts, create a fresh database or migrate it
+  before collecting more builds;
+- collection is fail-loud: HTTP errors, redirects, missing Pipeline timing,
+  unsupported non-Pipeline builds, invalid Jenkins payloads, and storage failures
+  abort the command rather than producing a partial success. If the CLI fails
+  after writes begin, the SQLite database may contain jobs or builds stored
+  before the failure; fix the cause and rerun the command to upsert safely;
+- Jenkins retention policies limit what can be collected. Deleted or no-longer
+  retained builds are unavailable to the client; and
+- pagination is not a transactional snapshot of Jenkins history. Concurrent build
+  completion or deletion can change what later pages return.
+
+Completion-time cutoffs are local filters. Jenkins is still asked for retained
+history pages, and terminal Pipeline builds need timing requests before their
+completion time can be checked, so a small lookback is not a server-side request
+limit.
+
+## Development
+
+This project is managed by [uv](https://docs.astral.sh/uv/), uses [just](https://just.systems/) for common tasks, and targets Python 3.14.
+
+```bash
+just test    # run pytest
+just lint    # run formatting, linting, and type checks
+just format  # format Python code
+just check   # run lint and test
+just clean   # remove non-project files (except anything in .jj)
+```
+
+When adding or changing a `Protocol`, a real implementation of a protocol, or a
+test fake intended to satisfy a protocol, update
+`tests/test_protocol_conformance.py` so mypy/pyright explicitly verify that
+implementation against the intended interface.

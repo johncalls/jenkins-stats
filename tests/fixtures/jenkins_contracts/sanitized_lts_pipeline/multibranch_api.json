@@ -1,0 +1,10 @@
+{
+  "_class": "org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject",
+  "jobs": [
+    {
+      "_class": "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+      "name": "feature%2Fcontract-fixture",
+      "url": "https://jenkins.example/job/team-service/job/feature%252Fcontract-fixture/"
+    }
+  ]
+}

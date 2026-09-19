@@ -1,0 +1,24 @@
+{
+  "_links": {
+    "self": {
+      "href": "/job/folder/job/pipeline-main/42/wfapi/describe"
+    }
+  },
+  "id": "42",
+  "name": "#42",
+  "status": "SUCCESS",
+  "startTimeMillis": 1713957960456,
+  "endTimeMillis": 1713958025888,
+  "durationMillis": 65432,
+  "pauseDurationMillis": 0,
+  "stages": [
+    {
+      "id": "6",
+      "name": "Build",
+      "status": "SUCCESS",
+      "startTimeMillis": 1713957961456,
+      "durationMillis": 12000,
+      "pauseDurationMillis": 0
+    }
+  ]
+}

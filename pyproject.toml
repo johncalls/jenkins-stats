@@ -1,0 +1,79 @@
+[project]
+name = "jenkins-stats"
+version = "0.1.0"
+description = "Tools for collecting and analyzing Jenkins build statistics"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.13.5",
+    "sqlite-utils>=4.2.1",
+]
+
+[project.scripts]
+jenkins-stats = "jenkins_stats.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812", # Conflicts with formatter.
+    "CPY001", # No copyright headers in this project.
+    "D203",   # Conflicts with D211.
+    "D213",   # Conflicts with D212.
+    "EM101",  # Literal exception messages are clearer for this small library.
+    "EM102",  # F-string exception messages are clearer for this small library.
+    "ISC001", # Conflicts with formatter.
+    "N818",   # Domain exception name reads better without an Error suffix.
+    "TRY003", # Custom exception classes for each ValueError would be noise here.
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["jenkins_stats"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "D",       # Test names document behavior; docstrings add noise.
+    "DTZ001",  # Tests intentionally construct naive datetimes.
+    "PLR0911", # Test fakes are clearer as simple request routers.
+    "PLR0913", # Test data builders use explicit keyword-only fields.
+    "PLR2004", # Worked examples use literal values.
+    "S101",    # Assert is idiomatic in pytest.
+    "S106",    # Fake test tokens are not credentials.
+]
+"tools/capture_jenkins_contract_fixture.py" = [
+    "INP001", # Tools are standalone scripts, not an importable package.
+]
+
+[tool.mypy]
+files = ["src", "tests", "tools/capture_jenkins_contract_fixture.py"]
+python_version = "3.14"
+strict = true
+show_error_codes = true
+warn_unused_ignores = true
+
+[tool.pyright]
+include = ["src", "tests", "tools/capture_jenkins_contract_fixture.py"]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+]

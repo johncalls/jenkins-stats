@@ -1,0 +1,15 @@
+{
+  "_class": "hudson.model.Hudson",
+  "jobs": [
+    {
+      "_class": "com.cloudbees.hudson.plugins.folder.Folder",
+      "name": "folder",
+      "url": "https://jenkins.example/job/folder/"
+    },
+    {
+      "_class": "org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject",
+      "name": "team-service",
+      "url": "https://jenkins.example/job/team-service/"
+    }
+  ]
+}
