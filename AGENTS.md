@@ -6,6 +6,15 @@ Prefer a Given-When-Then structure for tests. Use clear comments or variable nam
 to separate setup, action, and assertions, especially when the behavior is not
 obvious from the test name alone.
 
+## Python dependencies
+
+When adding Python dependencies, define an upper bound to the next major release
+(e.g. `package>=1.2,<2`).
+
+## Lint suppressions
+
+Get user approval before adding `# noqa` suppressions to code.
+
 ## Type safety
 
 Avoid using `Any` when a more precise type is practical, especially in protocol
