@@ -46,6 +46,7 @@ class _BuildReference(BaseModel):
 
 
 class _ItemResponse(BaseModel):
+    jenkins_class: str | None = Field(default=None, alias="_class")
     full_name: str | None = Field(default=None, alias="fullName")
     display_name: str | None = Field(default=None, alias="displayName")
     url: HttpUrl | None = None
@@ -238,7 +239,7 @@ class JenkinsClient:
     deletion during a full import, and deduplicate by Build.key.
     """
 
-    _ITEM_TREE = "fullName,displayName,url,jobs[name,url],builds[number]{0,0}"
+    _ITEM_TREE = "_class,fullName,displayName,url,jobs[name,url],builds[number]{0,0}"
     _BUILD_FIELDS = "_class,number,url,timestamp,duration,building,inProgress,result"
 
     def __init__(
@@ -286,6 +287,7 @@ class JenkinsClient:
                     full_name=item.full_name,
                     display_name=item.display_name,
                     url=item.url,
+                    jenkins_class=item.jenkins_class,
                 )
             if item.jobs is not None:
                 pending.extend(child.url for child in item.jobs)
@@ -353,6 +355,7 @@ class JenkinsClient:
                 "duration_ms": raw_build.duration,
                 "status": raw_build.result,
                 "url": raw_build.url,
+                "jenkins_class": raw_build.jenkins_class,
             }
         )
 
@@ -389,6 +392,8 @@ class JenkinsClient:
         if page_size <= 0:
             raise ValueError("page_size must be positive")
         cutoff = self._resolve_cutoff(since, lookback)
+        if not job.supports_build_collection:
+            return
         offset = 0
         seen: set[int] = set()
         while True:

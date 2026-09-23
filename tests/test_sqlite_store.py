@@ -34,11 +34,13 @@ def example_job(
     full_name: str = "folder/example",
     display_name: str | None = "Example",
     url: str = JOB_URL,
+    jenkins_class: str | None = "org.jenkinsci.plugins.workflow.job.WorkflowJob",
 ) -> Job:
     return Job(
         full_name=full_name,
         display_name=display_name,
         url=http_url(url),
+        jenkins_class=jenkins_class,
     )
 
 
@@ -57,6 +59,7 @@ def example_build(
         duration=timedelta(seconds=55),
         status=status,
         url=http_url(url),
+        jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowRun",
     )
 
 
@@ -109,7 +112,10 @@ def test_open_migrated_returns_store_with_complete_schema(tmp_path: Path) -> Non
     # When the store is opened through the migrated context factory.
     with SqliteStore.open_migrated(str(database_path)) as store:
         # Then the schema is ready for normal constrained writes.
-        assert migration_names(store.db.conn) == ["0001_initial_schema"]
+        assert migration_names(store.db.conn) == [
+            "0001_initial_schema",
+            "0002_jenkins_classes",
+        ]
         store.upsert_job(example_job())
         with pytest.raises(SqliteStoreOperationError, match="upsert build"):
             store.upsert_build(example_build(job_full_name="folder/missing"))
@@ -262,8 +268,11 @@ def test_open_migrated_creates_schema_and_records_sqlite_utils_migration(
     # Given a new store with no schema yet.
     # When the migrated factory creates it.
     with SqliteStore.open_migrated(tmp_path / "jenkins.sqlite") as store:
-        # Then the schema exists and the migration is recorded only once.
-        assert migration_names(store.db.conn) == ["0001_initial_schema"]
+        # Then the schema exists and both migrations are recorded once.
+        assert migration_names(store.db.conn) == [
+            "0001_initial_schema",
+            "0002_jenkins_classes",
+        ]
         assert store.table_names() == ["_sqlite_migrations", "builds", "jobs"]
         assert end_time_column_hidden_flag(store) == 2
 

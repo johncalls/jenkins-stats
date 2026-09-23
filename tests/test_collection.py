@@ -23,11 +23,16 @@ if TYPE_CHECKING:
 BASE_URL = "https://jenkins.example/"
 
 
-def _job(full_name: str) -> Job:
+def _job(
+    full_name: str,
+    *,
+    jenkins_class: str | None = "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+) -> Job:
     return Job(
         full_name=full_name,
         display_name=full_name,
         url=HttpUrl(f"{BASE_URL}job/{full_name}/"),
+        jenkins_class=jenkins_class,
     )
 
 
@@ -149,6 +154,23 @@ def test_collect_job_builds_uses_stored_job_without_discovering_all_jobs() -> No
     assert client.build_calls == [("frontend", 100, None, timedelta(hours=6))]
 
 
+def test_collect_job_builds_reports_skipped_job_without_requesting_builds() -> None:
+    # Given a stored job with an unsupported class.
+    job = _job("legacy", jenkins_class="hudson.model.FreeStyleProject")
+    client = RecordingClient([job], {"legacy": []})
+    store = RecordingStore()
+    store.upsert_jobs([job])
+
+    # When targeted build collection runs, then it returns a warning and no builds.
+    result = collect_job_builds(client, store, "legacy")
+
+    assert result.build_count == 0
+    assert result.skipped_jobs[0].job_full_name == "legacy"
+    assert result.output_lines()[1].startswith("WARNING: skipped builds for legacy:")
+    assert client.build_calls == []
+    assert store.builds == []
+
+
 def test_collect_job_builds_rejects_a_job_missing_from_the_store() -> None:
     # Given a target that has not first been stored by jobs collection.
     client = RecordingClient([], {})
@@ -229,6 +251,40 @@ def test_collect_upserts_all_jobs_before_retrieving_builds() -> None:
         "iter_builds:backend",
         "upsert_builds:backend#2",
     ]
+
+
+def test_collect_skips_unsupported_and_unknown_job_classes() -> None:
+    # Given supported, unsupported, and unknown job classes.
+    supported = _job("pipeline")
+    unsupported = _job("freestyle", jenkins_class="hudson.model.FreeStyleProject")
+    unknown = _job("unknown", jenkins_class=None)
+    client = RecordingClient(
+        [supported, unsupported, unknown],
+        {"pipeline": [], "freestyle": [], "unknown": []},
+    )
+    store = RecordingStore()
+
+    # When all jobs are collected.
+    result = collect(client, store)
+
+    # Then skipped jobs are reported without requesting their builds.
+    assert result.job_count == 3
+    assert result.build_count == 0
+    assert [job.job_full_name for job in result.skipped_jobs] == [
+        "freestyle",
+        "unknown",
+    ]
+    assert client.build_calls == [("pipeline", 100, None, DEFAULT_LOOKBACK)]
+    assert result.output_lines()[1:] == (
+        (
+            "WARNING: skipped builds for freestyle: unsupported Jenkins job class "
+            "hudson.model.FreeStyleProject"
+        ),
+        (
+            "WARNING: skipped builds for unknown: Jenkins job class is unknown; "
+            "rediscover jobs to refresh metadata"
+        ),
+    )
 
 
 def test_collect_passes_since_instead_of_default_lookback() -> None:

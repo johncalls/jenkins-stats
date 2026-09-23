@@ -51,10 +51,11 @@ def test_run_cli_command_collects_through_production_adapters(
                 json={"jobs": [{"name": "example", "url": str(JOB_URL)}]},
             )
         if request.url.path == "/job/folder/job/example/api/json":
-            if tree is not None and tree.startswith("fullName,"):
+            if tree is not None and tree.startswith("_class,fullName,"):
                 return httpx.Response(
                     HTTPStatus.OK,
                     json={
+                        "_class": "org.jenkinsci.plugins.workflow.job.WorkflowJob",
                         "fullName": "folder/example",
                         "displayName": "Example",
                         "url": str(JOB_URL),
@@ -109,16 +110,21 @@ def test_run_cli_command_collects_through_production_adapters(
         opened_urls,
     )
     assert opened_urls == [
-        "https://jenkins.example/api/json?tree=fullName%2CdisplayName%2Curl%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
-        "https://jenkins.example/job/folder/api/json?tree=fullName%2CdisplayName%2Curl%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
-        "https://jenkins.example/job/folder/job/example/api/json?tree=fullName%2CdisplayName%2Curl%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
+        "https://jenkins.example/api/json?tree=_class%2CfullName%2CdisplayName%2Curl%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
+        "https://jenkins.example/job/folder/api/json?tree=_class%2CfullName%2CdisplayName%2Curl%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
+        "https://jenkins.example/job/folder/job/example/api/json?tree=_class%2CfullName%2CdisplayName%2Curl%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
         "https://jenkins.example/job/folder/job/example/api/json?tree=allBuilds%5B_class%2Cnumber%2Curl%2Ctimestamp%2Cduration%2Cbuilding%2CinProgress%2Cresult%5D%7B0%2C100%7D",
         "https://jenkins.example/job/folder/job/example/1/wfapi/describe",
     ]
 
     with SqliteStore.open_migrated(database) as store:
         assert list(store.iter_jobs()) == [
-            Job(full_name="folder/example", display_name="Example", url=JOB_URL),
+            Job(
+                full_name="folder/example",
+                display_name="Example",
+                url=JOB_URL,
+                jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowJob",
+            ),
         ]
         assert list(store.iter_builds()) == [
             Build(
@@ -129,5 +135,6 @@ def test_run_cli_command_collects_through_production_adapters(
                 duration=timedelta(seconds=3),
                 status=BuildStatus.SUCCESS,
                 url=BUILD_URL,
+                jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowRun",
             ),
         ]

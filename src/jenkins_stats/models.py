@@ -98,6 +98,13 @@ class Job(BaseModel):
     full_name: str = Field(min_length=1)
     url: HttpUrl
     display_name: str | None = None
+    jenkins_class: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def supports_build_collection(self) -> bool:
+        """Whether this job class has a supported build timing source."""
+        return self.jenkins_class == "org.jenkinsci.plugins.workflow.job.WorkflowJob"
 
     @property
     def name(self) -> str:
@@ -133,6 +140,7 @@ class Build(BaseModel):
     )
     status: BuildStatus
     url: HttpUrl
+    jenkins_class: str | None = None
 
     @model_validator(mode="before")
     @classmethod

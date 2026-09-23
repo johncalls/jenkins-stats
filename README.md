@@ -75,24 +75,25 @@ Before running against a controller, confirm that:
   metadata, and Pipeline `wfapi/describe` timing endpoints. Hidden jobs are not
   returned, and permission failures abort collection. The client only uses GET
   requests, so no Jenkins CSRF crumb is required;
-- build collection is intended for Pipeline jobs. Job discovery can see folders,
-  multibranch projects, and non-Pipeline jobs, but build collection only supports
-  Pipeline runs because actual executor start time is read from the Pipeline REST
-  API plugin. A visible non-Pipeline completed build will abort `collect all`;
+- build collection currently supports Pipeline jobs whose job class is
+  `org.jenkinsci.plugins.workflow.job.WorkflowJob`; actual executor start time is
+  read from the Pipeline REST API plugin. Other, missing, or unknown job classes
+  are skipped and reported in the collection summary. The job class is stored and
+  can be refreshed with `collect jobs`;
 - the Pipeline REST API plugin is installed and each collected Pipeline run has a
   readable `wfapi/describe` endpoint with `startTimeMillis`;
 - the SQLite path is writable and scoped to one Jenkins controller/base URL. The
   current schema does not isolate multiple controllers, so reusing the same
   database for another controller can mix or overwrite rows with matching job
   names and build numbers;
-- existing databases were created with the current compatible schema. If an old
-  pre-release database fails build upserts, create a fresh database or migrate it
-  before collecting more builds;
-- collection is fail-loud: HTTP errors, redirects, missing Pipeline timing,
-  unsupported non-Pipeline builds, invalid Jenkins payloads, and storage failures
-  abort the command rather than producing a partial success. If the CLI fails
-  after writes begin, the SQLite database may contain jobs or builds stored
-  before the failure; fix the cause and rerun the command to upsert safely;
+- SQLite migrations add job and build class columns to existing databases. Jobs
+  already stored before that migration have an unknown class until rediscovered
+  with `collect jobs` or `collect all`;
+- collection is fail-loud for HTTP errors, redirects, missing Pipeline timing
+  for a supported run, invalid Jenkins payloads, and storage failures. Unsupported
+  job classes are skipped and reported rather than treated as collection failures.
+  If the CLI fails after writes begin, the SQLite database may contain earlier
+  job or build writes; fix the cause and rerun the command to upsert safely;
 - Jenkins retention policies limit what can be collected. Deleted or no-longer
   retained builds are unavailable to the client; and
 - pagination is not a transactional snapshot of Jenkins history. Concurrent build

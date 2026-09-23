@@ -41,7 +41,11 @@ def _epoch_ms(value: int) -> datetime:
 
 
 def _example_job() -> Job:
-    return Job(full_name="folder/example", url=JOB_URL)
+    return Job(
+        full_name="folder/example",
+        url=JOB_URL,
+        jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowJob",
+    )
 
 
 class FixedClock:
@@ -129,8 +133,9 @@ class FakeJenkinsTransport:
             return {"jobs": [{"name": "example", "url": str(JOB_URL)}]}
 
         if url == joined_url(JOB_URL, "api/json") and tree is not None:
-            if tree.startswith("fullName,"):
+            if tree.startswith("_class,fullName,"):
                 return {
+                    "_class": "org.jenkinsci.plugins.workflow.job.WorkflowJob",
                     "fullName": "folder/example",
                     "displayName": "Example",
                     "url": str(JOB_URL),
@@ -534,6 +539,7 @@ def test_iter_jobs_traverses_folders_and_yields_jobs() -> None:
             full_name="folder/example",
             display_name="Example",
             url=JOB_URL,
+            jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowJob",
         ),
     ]
     assert jobs[0].name == "example"
@@ -597,6 +603,7 @@ def test_iter_builds_uses_fake_pipeline_timing_and_filters_by_end_time() -> None
             duration=timedelta(milliseconds=2_500),
             status=BuildStatus.SUCCESS,
             url=BUILD_3_URL,
+            jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowRun",
         )
     ]
     assert builds[0].end_time == _epoch_ms(4_500)

@@ -16,7 +16,7 @@
     ]
   },
   "expected_trees": {
-    "item": "fullName,displayName,url,jobs[name,url],builds[number]{0,0}",
+    "item": "_class,fullName,displayName,url,jobs[name,url],builds[number]{0,0}",
     "build_page_0_2": "allBuilds[_class,number,url,timestamp,duration,building,inProgress,result]{0,2}",
     "build_page_2_4": "allBuilds[_class,number,url,timestamp,duration,building,inProgress,result]{2,4}",
     "build_page_0_100": "allBuilds[_class,number,url,timestamp,duration,building,inProgress,result]{0,100}"
@@ -25,16 +25,19 @@
     {
       "full_name": "folder/pipeline-main",
       "display_name": "Pipeline Main",
+      "jenkins_class": "org.jenkinsci.plugins.workflow.job.WorkflowJob",
       "url": "https://jenkins.example/job/folder/job/pipeline-main/"
     },
     {
       "full_name": "folder/legacy-freestyle",
       "display_name": "Legacy Freestyle",
+      "jenkins_class": "hudson.model.FreeStyleProject",
       "url": "https://jenkins.example/job/folder/job/legacy-freestyle/"
     },
     {
       "full_name": "team-service/feature%2Fcontract-fixture",
       "display_name": "feature/contract-fixture",
+      "jenkins_class": "org.jenkinsci.plugins.workflow.job.WorkflowJob",
       "url": "https://jenkins.example/job/team-service/job/feature%252Fcontract-fixture/"
     }
   ],
@@ -46,6 +49,7 @@
     "start_time_ms": 1713957960456,
     "duration_ms": 65432,
     "end_time_ms": 1713958025888,
-    "status": "SUCCESS"
+    "status": "SUCCESS",
+    "jenkins_class": "org.jenkinsci.plugins.workflow.job.WorkflowRun"
   }
 }

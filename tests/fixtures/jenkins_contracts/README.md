@@ -22,8 +22,9 @@ The build fixture intentionally has `timestamp` earlier than
 scheduled/queue time and obtains actual executor start time only from the
 Pipeline REST API. The expected `end_time` is therefore
 `startTimeMillis + duration` and is checked against `wfapi/describe.endTimeMillis`.
-Non-Pipeline builds are not approximated: the corresponding fixture must raise
-`StartTimeUnavailable` instead of inventing a start time from `timestamp`.
+Non-Pipeline build timing is not approximated. Collection uses the job/item
+class to skip unsupported jobs before requesting build pages; direct timing
+resolution for an unsupported run remains an explicit `StartTimeUnavailable`.
 
 ## Capturing or refreshing fixture data
 

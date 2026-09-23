@@ -130,6 +130,12 @@ def _initial_schema(db: Database) -> None:
     _create_build_indexes(db)
 
 
+@_MIGRATIONS(name="0002_jenkins_classes")
+def _jenkins_classes_schema(db: Database) -> None:
+    _execute(db, "ALTER TABLE jobs ADD COLUMN jenkins_class TEXT")
+    _execute(db, "ALTER TABLE builds ADD COLUMN jenkins_class TEXT")
+
+
 def _create_builds_table(db: Database) -> None:
     _execute(
         db,
@@ -365,6 +371,7 @@ def _job_row(job: Job) -> dict[str, RowValue]:
         "full_name": job.full_name,
         "url": str(job.url),
         "display_name": job.display_name,
+        "jenkins_class": job.jenkins_class,
     }
 
 
@@ -373,6 +380,7 @@ def _job_from_row(row: Row) -> Job:
         full_name=cast("str", row["full_name"]),
         url=HttpUrl(cast("str", row["url"])),
         display_name=cast("str | None", row["display_name"]),
+        jenkins_class=cast("str | None", row["jenkins_class"]),
     )
 
 
@@ -390,6 +398,7 @@ def _build_row(build: Build) -> dict[str, RowValue]:
                 "duration",
                 "status",
                 "url",
+                "jenkins_class",
             },
         ),
     )

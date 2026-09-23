@@ -17,6 +17,7 @@ __all__ = [
     "BuildCollectionOptions",
     "CollectionResult",
     "JenkinsBuildClient",
+    "SkippedJob",
     "Store",
     "collect",
     "collect_job_builds",
@@ -74,12 +75,22 @@ _DEFAULT_BUILD_COLLECTION_OPTIONS = BuildCollectionOptions()
 
 
 @dataclass(frozen=True)
+class SkippedJob:
+    """A job whose builds were not collected, with the reason for skipping."""
+
+    job_full_name: str
+    jenkins_class: str | None
+    reason: str
+
+
+@dataclass(frozen=True)
 class CollectionResult:
     """Summary of a collection run."""
 
     job_count: int
     build_count: int
     destination: str | None = None
+    skipped_jobs: tuple[SkippedJob, ...] = ()
 
     def with_destination(self, destination: str | PathLike[str]) -> CollectionResult:
         """Return this result annotated with where data was stored."""
@@ -87,6 +98,7 @@ class CollectionResult:
             job_count=self.job_count,
             build_count=self.build_count,
             destination=fspath(destination),
+            skipped_jobs=self.skipped_jobs,
         )
 
     def output_lines(self) -> tuple[str, ...]:
@@ -95,7 +107,11 @@ class CollectionResult:
         summary = (
             f"Stored {self.build_count} builds for {self.job_count} jobs{destination}"
         )
-        return (summary,)
+        warnings = tuple(
+            f"WARNING: skipped builds for {job.job_full_name}: {job.reason}"
+            for job in self.skipped_jobs
+        )
+        return (summary, *warnings)
 
 
 def collect(
@@ -111,16 +127,19 @@ def collect(
 
     jobs = list(client.iter_jobs())
     store.upsert_jobs(jobs)
-    build_count = sum(
-        _collect_job_builds(
-            client,
-            store,
-            job,
-            options,
-        )
-        for job in jobs
+    build_count = 0
+    skipped_jobs: list[SkippedJob] = []
+    for job in jobs:
+        skipped = _skip_reason(job)
+        if skipped is not None:
+            skipped_jobs.append(skipped)
+            continue
+        build_count += _collect_job_builds(client, store, job, options)
+    return CollectionResult(
+        job_count=len(jobs),
+        build_count=build_count,
+        skipped_jobs=tuple(skipped_jobs),
     )
-    return CollectionResult(job_count=len(jobs), build_count=build_count)
 
 
 def collect_jobs(client: JenkinsBuildClient, store: Store) -> CollectionResult:
@@ -141,8 +160,20 @@ def collect_job_builds(
     job = store.get_job(job_full_name)
     if job is None:
         raise ValueError(f"Job is not stored: {job_full_name}")
+    if (skipped := _skip_reason(job)) is not None:
+        return CollectionResult(job_count=1, build_count=0, skipped_jobs=(skipped,))
     build_count = _collect_job_builds(client, store, job, effective_options)
     return CollectionResult(job_count=1, build_count=build_count)
+
+
+def _skip_reason(job: Job) -> SkippedJob | None:
+    if job.supports_build_collection:
+        return None
+    if job.jenkins_class is None:
+        reason = "Jenkins job class is unknown; rediscover jobs to refresh metadata"
+    else:
+        reason = f"unsupported Jenkins job class {job.jenkins_class}"
+    return SkippedJob(job.full_name, job.jenkins_class, reason)
 
 
 def _collect_job_builds(

@@ -90,6 +90,29 @@ def test_build_accepts_every_terminal_status(status: BuildStatus) -> None:
     assert build.status is status
 
 
+def test_job_supports_build_collection_only_for_known_job_classes() -> None:
+    # Given supported, unsupported, and unknown Jenkins job classes.
+    pipeline = Job(
+        full_name="folder/pipeline",
+        url=http_url("https://jenkins.example/job/folder/job/pipeline/"),
+        jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowJob",
+    )
+    freestyle = Job(
+        full_name="folder/freestyle",
+        url=http_url("https://jenkins.example/job/folder/job/freestyle/"),
+        jenkins_class="hudson.model.FreeStyleProject",
+    )
+    unknown = Job(
+        full_name="folder/unknown",
+        url=http_url("https://jenkins.example/job/folder/job/unknown/"),
+    )
+
+    # Then only the explicitly supported class is eligible for build collection.
+    assert pipeline.supports_build_collection is True
+    assert freestyle.supports_build_collection is False
+    assert unknown.supports_build_collection is False
+
+
 def test_job_and_build_models_are_immutable() -> None:
     # Given public domain models.
     job = Job(

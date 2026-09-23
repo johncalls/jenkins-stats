@@ -181,6 +181,7 @@ def test_iter_jobs_matches_sanitized_folder_and_multibranch_contract() -> None:
             full_name=json_str(record, "full_name"),
             display_name=json_str(record, "display_name"),
             url=HttpUrl(json_str(record, "url")),
+            jenkins_class=json_str(record, "jenkins_class"),
         )
         for record in cast(
             "list[dict[str, object]]",
@@ -198,7 +199,11 @@ def test_iter_builds_matches_pipeline_timing_contract() -> None:
     timing = fixture_json("pipeline_build_42_wfapi_describe.json")
     transport = JenkinsContractFixtureTransport()
     client = JenkinsClient(BASE_URL, transport)
-    job = Job(full_name=json_str(expected, "job_full_name"), url=PIPELINE_JOB_URL)
+    job = Job(
+        full_name=json_str(expected, "job_full_name"),
+        url=PIPELINE_JOB_URL,
+        jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowJob",
+    )
 
     # When retained builds are collected.
     builds = list(client.iter_builds(job, page_size=2))
@@ -213,6 +218,7 @@ def test_iter_builds_matches_pipeline_timing_contract() -> None:
             duration=timedelta(milliseconds=json_int(expected, "duration_ms")),
             status=BuildStatus(json_str(expected, "status")),
             url=HttpUrl(json_str(expected, "url")),
+            jenkins_class=json_str(expected, "jenkins_class"),
         )
     ]
     assert builds[0].scheduled_time < builds[0].start_time
@@ -229,28 +235,30 @@ def test_iter_builds_matches_pipeline_timing_contract() -> None:
     ) not in transport.calls
 
 
-def test_non_pipeline_contract_fails_without_approximating_start_time() -> None:
-    # Given a sanitized Freestyle build response with only Jenkins core timing.
+def test_non_pipeline_job_is_skipped_before_requesting_builds() -> None:
+    # Given a sanitized Freestyle job with no supported timing source.
     transport = JenkinsContractFixtureTransport()
     client = JenkinsClient(BASE_URL, transport)
-    job = Job(full_name="folder/legacy-freestyle", url=FREESTYLE_JOB_URL)
-
-    # When builds are collected, then unsupported timing is not approximated.
-    with pytest.raises(
-        StartTimeUnavailable, match="only Pipeline builds are supported"
-    ):
-        list(client.iter_builds(job))
-    assert all(
-        url.path is None or "wfapi/describe" not in url.path
-        for url, _tree in transport.calls
+    job = Job(
+        full_name="folder/legacy-freestyle",
+        url=FREESTYLE_JOB_URL,
+        jenkins_class="hudson.model.FreeStyleProject",
     )
+
+    # When builds are requested, then no build page or timing endpoint is fetched.
+    assert list(client.iter_builds(job)) == []
+    assert transport.calls == []
 
 
 def test_missing_pipeline_rest_api_contract_fails_loudly() -> None:
     # Given a Pipeline run whose Pipeline REST timing endpoint is unavailable.
     transport = JenkinsContractFixtureTransport(missing_plugin_timing=True)
     client = JenkinsClient(BASE_URL, transport)
-    job = Job(full_name="folder/pipeline-main", url=PIPELINE_JOB_URL)
+    job = Job(
+        full_name="folder/pipeline-main",
+        url=PIPELINE_JOB_URL,
+        jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowJob",
+    )
 
     # When builds are collected, then the missing plugin/endpoint is explicit.
     with pytest.raises(
