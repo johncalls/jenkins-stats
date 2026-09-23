@@ -21,11 +21,14 @@ from jenkins_stats.cli_command import (
     CollectJobsCommand,
     run_cli_command,
 )
+from jenkins_stats.cli_progress import ProgressDisplay
 from jenkins_stats.jenkins import JsonTransportError, StartTimeUnavailable
 from jenkins_stats.sqlite_store import SqliteStoreError
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from jenkins_stats.collection import ProgressCallback
 
 __all__ = [
     "CliCommandRunner",
@@ -59,9 +62,15 @@ class CliResult(Protocol):
 
 
 class CliCommandRunner(Protocol):
-    """Run a typed top-level CLI command and return a renderable result."""
+    """Run a typed command, reporting optional collection progress."""
 
-    def __call__(self, command: CliCommand, /) -> CliResult:
+    def __call__(
+        self,
+        command: CliCommand,
+        /,
+        *,
+        progress: ProgressCallback | None = None,
+    ) -> CliResult:
         """Run the command."""
         ...
 
@@ -165,6 +174,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="collect Jenkins jobs or build metadata into SQLite",
     )
     _add_connection_options(collect_parser)
+    collect_parser.add_argument(
+        "--progress",
+        choices=("auto", "plain", "none"),
+        default="auto",
+        help=(
+            "progress display: auto for terminals, plain text, or none (default: auto)"
+        ),
+    )
     collect_subparsers = collect_parser.add_subparsers(
         dest="collect_target", required=True
     )
@@ -264,7 +281,11 @@ def main(
         parser.error("Specify either --since or --lookback, not both")
 
     try:
-        result = command_runner(cli_command_from_args(args))
+        with ProgressDisplay(args.progress) as progress:
+            result = command_runner(
+                cli_command_from_args(args),
+                progress=progress,
+            )
     except ValueError as exc:
         _write_error(exc)
         return 2

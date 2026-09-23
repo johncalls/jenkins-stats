@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from os import PathLike, fspath
 from typing import TYPE_CHECKING, Protocol
 
@@ -14,8 +15,11 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BuildCollectionOptions",
+    "CollectionPhase",
+    "CollectionProgress",
     "CollectionResult",
     "JenkinsBuildClient",
+    "ProgressCallback",
     "SkippedJob",
     "Store",
     "collect",
@@ -85,6 +89,39 @@ class SkippedJob:
     reason: str
 
 
+class CollectionPhase(StrEnum):
+    """Known phases for collection progress events."""
+
+    DISCOVERING_JOBS = "discovering_jobs"
+    JOB_FOUND = "job_found"
+    JOBS_DISCOVERED = "jobs_discovered"
+    COLLECTING_JOB_BUILDS = "collecting_job_builds"
+    BUILD_COLLECTED = "build_collected"
+    JOB_BUILDS_COLLECTED = "job_builds_collected"
+    JOB_SKIPPED = "job_skipped"
+
+
+@dataclass(frozen=True)
+class CollectionProgress:
+    """An update emitted while a collection workflow is running."""
+
+    phase: CollectionPhase
+    jobs_found: int = 0
+    job_count: int | None = None
+    job_index: int | None = None
+    job_full_name: str | None = None
+    builds_collected: int = 0
+    reason: str | None = None
+
+
+class ProgressCallback(Protocol):
+    """Callable notified of collection progress events."""
+
+    def __call__(self, event: CollectionProgress, /) -> None:
+        """Handle one collection progress event."""
+        ...
+
+
 @dataclass(frozen=True)
 class CollectionResult:
     """Summary of a collection run."""
@@ -130,20 +167,50 @@ def collect(
     page_size: int = 100,
     since: datetime | None = None,
     lookback: timedelta | None = None,
+    progress: ProgressCallback | None = None,
 ) -> CollectionResult:
     """Collect visible Jenkins jobs and their builds into a store."""
     options = _build_collection_options(page_size, since, lookback)
 
-    jobs = list(client.iter_jobs())
-    store.upsert_jobs(jobs)
+    jobs = _discover_jobs(client, store, progress)
     build_count = 0
     skipped_jobs: list[SkippedJob] = []
-    for job in jobs:
+    for job_index, job in enumerate(jobs, start=1):
         skipped = _skip_reason(job)
         if skipped is not None:
             skipped_jobs.append(skipped)
+            _report(
+                progress,
+                CollectionProgress(
+                    CollectionPhase.JOB_SKIPPED,
+                    job_count=len(jobs),
+                    job_index=job_index,
+                    job_full_name=job.full_name,
+                    reason=skipped.reason,
+                ),
+            )
             continue
-        build_count += _collect_job_builds(client, store, job, options)
+        _report(
+            progress,
+            CollectionProgress(
+                CollectionPhase.COLLECTING_JOB_BUILDS,
+                job_count=len(jobs),
+                job_index=job_index,
+                job_full_name=job.full_name,
+            ),
+        )
+        collected = _collect_job_builds(client, store, job, options, progress)
+        build_count += collected
+        _report(
+            progress,
+            CollectionProgress(
+                CollectionPhase.JOB_BUILDS_COLLECTED,
+                job_count=len(jobs),
+                job_index=job_index,
+                job_full_name=job.full_name,
+                builds_collected=collected,
+            ),
+        )
     return CollectionResult(
         job_count=len(jobs),
         build_count=build_count,
@@ -152,10 +219,14 @@ def collect(
     )
 
 
-def collect_jobs(client: JenkinsBuildClient, store: Store) -> CollectionResult:
+def collect_jobs(
+    client: JenkinsBuildClient,
+    store: Store,
+    *,
+    progress: ProgressCallback | None = None,
+) -> CollectionResult:
     """Discover visible Jenkins jobs and store them without retrieving builds."""
-    jobs = list(client.iter_jobs())
-    store.upsert_jobs(jobs)
+    jobs = _discover_jobs(client, store, progress)
     return CollectionResult(job_count=len(jobs), build_count=0)
 
 
@@ -164,6 +235,8 @@ def collect_job_builds(
     store: Store,
     job_full_name: str,
     options: BuildCollectionOptions = _DEFAULT_BUILD_COLLECTION_OPTIONS,
+    *,
+    progress: ProgressCallback | None = None,
 ) -> CollectionResult:
     """Collect builds for one job previously stored by :func:`collect_jobs`."""
     effective_options = _effective_build_collection_options(options)
@@ -171,8 +244,37 @@ def collect_job_builds(
     if job is None:
         raise ValueError(f"Job is not stored: {job_full_name}")
     if (skipped := _skip_reason(job)) is not None:
+        _report(
+            progress,
+            CollectionProgress(
+                CollectionPhase.JOB_SKIPPED,
+                job_count=1,
+                job_index=1,
+                job_full_name=job.full_name,
+                reason=skipped.reason,
+            ),
+        )
         return CollectionResult(job_count=1, build_count=0, skipped_jobs=(skipped,))
-    build_count = _collect_job_builds(client, store, job, effective_options)
+    _report(
+        progress,
+        CollectionProgress(
+            CollectionPhase.COLLECTING_JOB_BUILDS,
+            job_count=1,
+            job_index=1,
+            job_full_name=job.full_name,
+        ),
+    )
+    build_count = _collect_job_builds(client, store, job, effective_options, progress)
+    _report(
+        progress,
+        CollectionProgress(
+            CollectionPhase.JOB_BUILDS_COLLECTED,
+            job_count=1,
+            job_index=1,
+            job_full_name=job.full_name,
+            builds_collected=build_count,
+        ),
+    )
     return CollectionResult(
         job_count=1,
         build_count=build_count,
@@ -222,20 +324,58 @@ def _completion_filter_description(options: BuildCollectionOptions) -> str:
     return "none (all retained builds)"
 
 
+def _discover_jobs(
+    client: JenkinsBuildClient,
+    store: Store,
+    progress: ProgressCallback | None,
+) -> list[Job]:
+    _report(progress, CollectionProgress(CollectionPhase.DISCOVERING_JOBS))
+    jobs: list[Job] = []
+    for job in client.iter_jobs():
+        jobs.append(job)
+        _report(
+            progress,
+            CollectionProgress(CollectionPhase.JOB_FOUND, jobs_found=len(jobs)),
+        )
+    store.upsert_jobs(jobs)
+    _report(
+        progress,
+        CollectionProgress(CollectionPhase.JOBS_DISCOVERED, jobs_found=len(jobs)),
+    )
+    return jobs
+
+
+def _report(
+    progress: ProgressCallback | None,
+    event: CollectionProgress,
+) -> None:
+    if progress is not None:
+        progress(event)
+
+
 def _collect_job_builds(
     client: JenkinsBuildClient,
     store: Store,
     job: Job,
     options: BuildCollectionOptions,
+    progress: ProgressCallback | None = None,
 ) -> int:
-    builds = list(
-        client.iter_builds(
-            job,
-            page_size=options.page_size,
-            since=options.since,
-            lookback=options.lookback,
+    builds: list[Build] = []
+    for build in client.iter_builds(
+        job,
+        page_size=options.page_size,
+        since=options.since,
+        lookback=options.lookback,
+    ):
+        builds.append(build)
+        _report(
+            progress,
+            CollectionProgress(
+                CollectionPhase.BUILD_COLLECTED,
+                job_full_name=job.full_name,
+                builds_collected=len(builds),
+            ),
         )
-    )
     store.upsert_builds(builds)
     return len(builds)
 

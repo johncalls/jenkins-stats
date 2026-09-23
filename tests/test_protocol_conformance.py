@@ -11,7 +11,14 @@ if TYPE_CHECKING:
 
     from jenkins_stats.cli import CliCommandRunner, CliResult
     from jenkins_stats.cli_command import run_cli_command
-    from jenkins_stats.collection import CollectionResult, JenkinsBuildClient, Store
+    from jenkins_stats.cli_progress import ProgressDisplay
+    from jenkins_stats.collection import (
+        CollectionProgress,
+        CollectionResult,
+        JenkinsBuildClient,
+        ProgressCallback,
+        Store,
+    )
     from jenkins_stats.jenkins import (
         Clock,
         HttpJsonTransport,
@@ -83,6 +90,12 @@ if TYPE_CHECKING:
     _sqlite_utils_table_check = Table(Database(memory=True), "protocol_check")
     _sqlite_jobs_table_check: _JobsTable = _sqlite_utils_table_check
     _sqlite_builds_table_check: _BuildsTable = _sqlite_utils_table_check
+
+    def _progress_callback_test_helper(event: CollectionProgress, /) -> None:
+        _ = event
+
+    _progress_callback_function_check: ProgressCallback = _progress_callback_test_helper
+    _progress_display_callback_check: ProgressCallback = ProgressDisplay("none")
 
     _collection_result_check: CliResult = CollectionResult(
         job_count=0,

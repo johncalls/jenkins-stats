@@ -8,6 +8,8 @@ from pydantic import HttpUrl
 
 from jenkins_stats.collection import (
     BuildCollectionOptions,
+    CollectionPhase,
+    CollectionProgress,
     CollectionResult,
     collect,
     collect_job_builds,
@@ -114,6 +116,40 @@ class RecordingStore:
                 f"{build.job_full_name}#{build.number}" for build in build_list
             )
             self.events.append(f"upsert_builds:{build_keys}")
+
+
+def test_collect_reports_job_discovery_before_per_job_build_progress() -> None:
+    # Given two visible jobs and one retained build for each.
+    frontend = _job("frontend")
+    backend = _job("backend")
+    client = RecordingClient(
+        [frontend, backend],
+        {
+            "frontend": [_build("frontend", 1)],
+            "backend": [_build("backend", 2)],
+        },
+    )
+    store = RecordingStore()
+    progress: list[CollectionProgress] = []
+
+    # When collection runs with a progress callback.
+    result = collect(client, store, progress=progress.append)
+
+    # Then discovery completes before build work, with per-job build updates.
+    phases = [event.phase for event in progress]
+    assert phases.index(CollectionPhase.JOBS_DISCOVERED) < phases.index(
+        CollectionPhase.COLLECTING_JOB_BUILDS,
+    )
+    assert [event.phase for event in progress].count(CollectionPhase.JOB_FOUND) == 2
+    assert (
+        [event.phase for event in progress].count(CollectionPhase.BUILD_COLLECTED) == 2
+    )
+    assert [
+        (event.job_index, event.job_count, event.job_full_name)
+        for event in progress
+        if event.phase is CollectionPhase.COLLECTING_JOB_BUILDS
+    ] == [(1, 2, "frontend"), (2, 2, "backend")]
+    assert result.build_count == 2
 
 
 def test_collect_jobs_upserts_visible_jobs_without_retrieving_builds() -> None:

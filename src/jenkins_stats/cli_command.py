@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from jenkins_stats.collection import (
     BuildCollectionOptions,
     CollectionResult,
+    ProgressCallback,
     collect,
     collect_job_builds,
     collect_jobs,
@@ -82,7 +83,11 @@ type CliCommand = (
 )
 
 
-def run_cli_command(command: CliCommand) -> CollectionResult:
+def run_cli_command(
+    command: CliCommand,
+    *,
+    progress: ProgressCallback | None = None,
+) -> CollectionResult:
     """Run a typed top-level CLI command using production components."""
     with (
         HttpJsonTransport(
@@ -102,9 +107,10 @@ def run_cli_command(command: CliCommand) -> CollectionResult:
                     page_size=command.page_size,
                     since=command.since,
                     lookback=command.lookback,
+                    progress=progress,
                 )
             case CollectJobsCommand():
-                result = collect_jobs(jenkins_client, store)
+                result = collect_jobs(jenkins_client, store, progress=progress)
             case CollectJobBuildsCommand():
                 result = collect_job_builds(
                     jenkins_client,
@@ -115,6 +121,7 @@ def run_cli_command(command: CliCommand) -> CollectionResult:
                         since=command.since,
                         lookback=command.lookback,
                     ),
+                    progress=progress,
                 )
             case CollectAllStoredJobBuildsCommand():
                 result = collect_stored_job_builds(

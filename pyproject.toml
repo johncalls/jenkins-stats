@@ -7,6 +7,7 @@ requires-python = ">=3.14"
 dependencies = [
     "httpx>=0.28.1,<1",
     "pydantic>=2.13.5,<3",
+    "rich>=14.0.0,<15",
     "sqlite-utils>=4.2.1,<5",
 ]
 
@@ -40,6 +41,9 @@ ignore = [
     "N818",   # Domain exception name reads better without an Error suffix.
     "TRY003", # Custom exception classes for each ValueError would be noise here.
 ]
+
+[tool.ruff.lint.pylint]
+max-args = 6
 
 [tool.ruff.lint.isort]
 known-first-party = ["jenkins_stats"]

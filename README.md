@@ -16,8 +16,14 @@ The CLI has one top-level workflow:
 jenkins-stats collect [connection options] {all,jobs,builds} [target options]
 ```
 
-Connection options must appear before the collection target. They can be passed
-as flags or environment variables:
+Connection options must appear before the collection target. The `--progress`
+option also appears before the target; it accepts `auto` (default, Rich display
+only in terminals), `plain` (status lines on stderr), or `none`. Progress is sent
+to stderr, leaving the final summary on stdout. During `all`, progress first
+tracks job discovery and then build collection per job; during `jobs`, it tracks
+only discovery.
+
+Connection options can be passed as flags or environment variables:
 
 ```bash
 export JENKINS_URL=https://jenkins.example.com/

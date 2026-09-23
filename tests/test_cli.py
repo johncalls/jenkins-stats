@@ -14,7 +14,7 @@ from jenkins_stats.cli_command import (
     CollectJobBuildsCommand,
     CollectJobsCommand,
 )
-from jenkins_stats.collection import CollectionResult
+from jenkins_stats.collection import CollectionResult, ProgressCallback
 from jenkins_stats.jenkins import JsonTransportError, StartTimeUnavailable
 from jenkins_stats.sqlite_store import SqliteStoreOperationError
 
@@ -159,7 +159,12 @@ def test_main_passes_collect_all_command_to_runner_and_prints_summary(
     database = tmp_path / "jenkins.sqlite"
     seen_commands: list[CliCommand] = []
 
-    def runner(command: CliCommand) -> CollectionResult:
+    def runner(
+        command: CliCommand,
+        *,
+        progress: ProgressCallback | None = None,
+    ) -> CollectionResult:
+        _ = progress
         seen_commands.append(command)
         return CollectionResult(job_count=2, build_count=3).with_destination(
             command.database,
@@ -297,7 +302,12 @@ def test_collect_command_rejects_invalid_filter_arguments(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # Given invalid completion-time filter arguments.
-    def runner(_command: CliCommand) -> CollectionResult:
+    def runner(
+        _command: CliCommand,
+        *,
+        progress: ProgressCallback | None = None,
+    ) -> CollectionResult:
+        _ = progress
         pytest.fail("runner should not be called")
 
     # When parsing or command validation runs, then argparse exits clearly.
@@ -317,7 +327,12 @@ def test_collect_command_rejects_out_of_range_cutoff_before_running(
     # Given a representable lookback that still underflows today's cutoff.
     database = tmp_path / "jenkins.sqlite"
 
-    def runner(_command: CliCommand) -> CollectionResult:
+    def runner(
+        _command: CliCommand,
+        *,
+        progress: ProgressCallback | None = None,
+    ) -> CollectionResult:
+        _ = progress
         pytest.fail("runner should not be called")
 
     # When collection is requested, then validation fails before the runner.
@@ -395,7 +410,12 @@ def test_collect_command_requires_url_and_credentials(
     monkeypatch.delenv("JENKINS_USERNAME", raising=False)
     monkeypatch.delenv("JENKINS_API_TOKEN", raising=False)
 
-    def runner(_command: CliCommand) -> CollectionResult:
+    def runner(
+        _command: CliCommand,
+        *,
+        progress: ProgressCallback | None = None,
+    ) -> CollectionResult:
+        _ = progress
         pytest.fail("runner should not be called")
 
     # When collection is requested, then it fails before running the command.
@@ -437,7 +457,12 @@ def test_main_reports_operational_failures_without_success_summary(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # Given a runner that raises an operational failure.
-    def runner(_command: CliCommand) -> CollectionResult:
+    def runner(
+        _command: CliCommand,
+        *,
+        progress: ProgressCallback | None = None,
+    ) -> CollectionResult:
+        _ = progress
         raise failure
 
     # When the CLI command runs.
