@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 from os import PathLike, fspath
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from datetime import datetime, timedelta
 
     from jenkins_stats.models import Build, Job
 
 __all__ = [
-    "DEFAULT_LOOKBACK",
     "BuildCollectionOptions",
     "CollectionResult",
     "JenkinsBuildClient",
@@ -23,8 +22,6 @@ __all__ = [
     "collect_job_builds",
     "collect_jobs",
 ]
-
-DEFAULT_LOOKBACK = timedelta(days=1)
 
 
 class JenkinsBuildClient(Protocol):
@@ -91,6 +88,7 @@ class CollectionResult:
     build_count: int
     destination: str | None = None
     skipped_jobs: tuple[SkippedJob, ...] = ()
+    completion_filter: str | None = None
 
     def with_destination(self, destination: str | PathLike[str]) -> CollectionResult:
         """Return this result annotated with where data was stored."""
@@ -99,6 +97,7 @@ class CollectionResult:
             build_count=self.build_count,
             destination=fspath(destination),
             skipped_jobs=self.skipped_jobs,
+            completion_filter=self.completion_filter,
         )
 
     def output_lines(self) -> tuple[str, ...]:
@@ -107,11 +106,16 @@ class CollectionResult:
         summary = (
             f"Stored {self.build_count} builds for {self.job_count} jobs{destination}"
         )
+        filter_line = (
+            (f"Completion filter: {self.completion_filter}",)
+            if self.completion_filter is not None
+            else ()
+        )
         warnings = tuple(
             f"WARNING: skipped builds for {job.job_full_name}: {job.reason}"
             for job in self.skipped_jobs
         )
-        return (summary, *warnings)
+        return (summary, *filter_line, *warnings)
 
 
 def collect(
@@ -139,6 +143,7 @@ def collect(
         job_count=len(jobs),
         build_count=build_count,
         skipped_jobs=tuple(skipped_jobs),
+        completion_filter=_completion_filter_description(options),
     )
 
 
@@ -163,7 +168,11 @@ def collect_job_builds(
     if (skipped := _skip_reason(job)) is not None:
         return CollectionResult(job_count=1, build_count=0, skipped_jobs=(skipped,))
     build_count = _collect_job_builds(client, store, job, effective_options)
-    return CollectionResult(job_count=1, build_count=build_count)
+    return CollectionResult(
+        job_count=1,
+        build_count=build_count,
+        completion_filter=_completion_filter_description(effective_options),
+    )
 
 
 def _skip_reason(job: Job) -> SkippedJob | None:
@@ -174,6 +183,14 @@ def _skip_reason(job: Job) -> SkippedJob | None:
     else:
         reason = f"unsupported Jenkins job class {job.jenkins_class}"
     return SkippedJob(job.full_name, job.jenkins_class, reason)
+
+
+def _completion_filter_description(options: BuildCollectionOptions) -> str:
+    if options.since is not None:
+        return f"since {options.since.isoformat()}"
+    if options.lookback is not None:
+        return f"lookback {options.lookback}"
+    return "none (all retained builds)"
 
 
 def _collect_job_builds(
@@ -215,6 +232,4 @@ def _effective_build_collection_options(
         raise ValueError("Specify either since or lookback, not both")
     if options.page_size <= 0:
         raise ValueError("page_size must be positive")
-    if options.since is None and options.lookback is None:
-        return replace(options, lookback=DEFAULT_LOOKBACK)
     return options

@@ -25,7 +25,7 @@ def _cli_command_from_argv(argv: list[str]) -> CliCommand:
     return cli.cli_command_from_args(parser.parse_args(argv))
 
 
-def test_collect_all_arguments_become_command_with_default_one_day_lookback(
+def test_collect_all_arguments_default_to_no_completion_filter(
     tmp_path: Path,
 ) -> None:
     # Given all-collection arguments with explicit connection settings.
@@ -47,7 +47,7 @@ def test_collect_all_arguments_become_command_with_default_one_day_lookback(
         ],
     )
 
-    # Then it contains typed values and the default one-day lookback.
+    # Then it contains typed values without a completion-time cutoff.
     assert command == CollectAllCommand(
         jenkins_url=HttpUrl(BASE_URL),
         database=database,
@@ -56,7 +56,7 @@ def test_collect_all_arguments_become_command_with_default_one_day_lookback(
         timeout=30.0,
         page_size=100,
         since=None,
-        lookback=timedelta(days=1),
+        lookback=None,
     )
 
 
@@ -179,7 +179,7 @@ def test_main_passes_collect_all_command_to_runner_and_prints_summary(
             timeout=30.0,
             page_size=100,
             since=None,
-            lookback=timedelta(days=1),
+            lookback=None,
         ),
     ]
     assert capsys.readouterr().out == f"Stored 3 builds for 2 jobs in {database}\n"

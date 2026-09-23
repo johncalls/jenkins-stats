@@ -38,7 +38,10 @@ Common connection options:
 Collection targets:
 
 ```bash
-# Discover visible jobs and collect their builds.
+# Discover visible jobs and collect every retained build.
+uv run jenkins-stats collect all
+
+# Discover visible jobs and collect recent builds.
 uv run jenkins-stats collect all --lookback 6h
 
 # Discover visible jobs only; no build endpoints are requested.
@@ -51,14 +54,16 @@ uv run jenkins-stats collect builds "folder/deploy-main" --since 2024-01-01T00:0
 `all` and `builds` accept:
 
 - `--lookback DURATION`, using `ms`, `s`, `m`, `h`, or `d` units; bare numbers
-  are seconds. The default is `1d`.
+  are seconds.
 - `--since DATETIME`, an inclusive completion-time cutoff. It must be a
   timezone-aware ISO timestamp; `Z` is accepted for UTC.
 - `--page-size N`, the Jenkins retained-build page size (default: `100`).
 
-`--since` and `--lookback` are mutually exclusive. Use `--since` when you need a
-fixed cutoff shared across a multi-job run; relative lookbacks are resolved while
-jobs are being scanned.
+`--since` and `--lookback` are mutually exclusive. Omit both to import every
+retained build visible through `allBuilds`. Use `--since` when you need a fixed
+cutoff shared across a multi-job run; relative lookbacks are resolved while jobs
+are being scanned. Successful build-collection runs print the active completion
+filter after the stored-build summary.
 
 ### Operational prerequisites
 

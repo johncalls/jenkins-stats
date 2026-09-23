@@ -7,7 +7,6 @@ import pytest
 from pydantic import HttpUrl
 
 from jenkins_stats.collection import (
-    DEFAULT_LOOKBACK,
     BuildCollectionOptions,
     CollectionResult,
     collect,
@@ -149,7 +148,11 @@ def test_collect_job_builds_uses_stored_job_without_discovering_all_jobs() -> No
     )
 
     # Then only its builds are retrieved and stored.
-    assert result == CollectionResult(job_count=1, build_count=1)
+    assert result == CollectionResult(
+        job_count=1,
+        build_count=1,
+        completion_filter="lookback 6:00:00",
+    )
     assert store.builds == [target_build]
     assert client.build_calls == [("frontend", 100, None, timedelta(hours=6))]
 
@@ -181,7 +184,7 @@ def test_collect_job_builds_rejects_a_job_missing_from_the_store() -> None:
     assert client.build_calls == []
 
 
-def test_collect_upserts_visible_jobs_and_builds_with_default_lookback() -> None:
+def test_collect_upserts_visible_jobs_and_builds_without_default_lookback() -> None:
     # Given visible Jenkins jobs and builds.
     frontend = _job("frontend")
     backend = _job("backend")
@@ -196,14 +199,15 @@ def test_collect_upserts_visible_jobs_and_builds_with_default_lookback() -> None
     # When collection runs without an explicit completion-time filter.
     result = collect(client, store)
 
-    # Then the workflow stores all yielded records using a one-day lookback.
+    # Then the workflow stores all yielded records without a completion cutoff.
     assert result.job_count == 2
     assert result.build_count == 2
+    assert result.completion_filter == "none (all retained builds)"
     assert store.jobs == [frontend, backend]
     assert store.builds == [frontend_build, backend_build]
     assert client.build_calls == [
-        ("frontend", 100, None, DEFAULT_LOOKBACK),
-        ("backend", 100, None, DEFAULT_LOOKBACK),
+        ("frontend", 100, None, None),
+        ("backend", 100, None, None),
     ]
 
 
@@ -274,8 +278,9 @@ def test_collect_skips_unsupported_and_unknown_job_classes() -> None:
         "freestyle",
         "unknown",
     ]
-    assert client.build_calls == [("pipeline", 100, None, DEFAULT_LOOKBACK)]
+    assert client.build_calls == [("pipeline", 100, None, None)]
     assert result.output_lines()[1:] == (
+        "Completion filter: none (all retained builds)",
         (
             "WARNING: skipped builds for freestyle: unsupported Jenkins job class "
             "hudson.model.FreeStyleProject"
@@ -296,8 +301,9 @@ def test_collect_passes_since_instead_of_default_lookback() -> None:
     # When collection runs with --since semantics.
     result = collect(client, RecordingStore(), since=since)
 
-    # Then the default lookback is not also sent to the client.
+    # Then no lookback is also sent to the client.
     assert result.job_count == 1
+    assert result.completion_filter == "since 2024-01-01T00:00:00+00:00"
     assert client.build_calls == [("frontend", 100, since, None)]
 
 

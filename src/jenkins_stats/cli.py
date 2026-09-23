@@ -20,7 +20,6 @@ from jenkins_stats.cli_command import (
     CollectJobsCommand,
     run_cli_command,
 )
-from jenkins_stats.collection import DEFAULT_LOOKBACK
 from jenkins_stats.jenkins import JsonTransportError, StartTimeUnavailable
 from jenkins_stats.sqlite_store import SqliteStoreError
 
@@ -234,7 +233,7 @@ def _add_build_collection_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--lookback",
         type=_non_negative_duration,
-        help="relative completion-time cutoff (default: 1d)",
+        help="relative completion-time cutoff",
     )
     parser.add_argument(
         "--page-size",
@@ -355,7 +354,7 @@ def _build_collection_args(
     lookback = _optional_timedelta_arg(args, "lookback")
     if since is not None and lookback is not None:
         raise ValueError("Specify either since or lookback, not both")
-    effective_lookback = None if since is not None else lookback or DEFAULT_LOOKBACK
+    effective_lookback = None if since is not None else lookback
     _validate_completion_cutoff(effective_lookback)
     return _int_arg(args, "page_size"), since, effective_lookback
 
