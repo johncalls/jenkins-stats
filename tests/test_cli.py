@@ -464,3 +464,37 @@ def test_main_reports_operational_failures_without_success_summary(
     assert expected in captured.err
     assert "fix the problem and rerun" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_main_reports_keyboard_interrupt_without_traceback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given a runner interrupted midway through collection.
+    def runner(_command: CliCommand) -> CollectionResult:
+        raise KeyboardInterrupt
+
+    # When the CLI command runs.
+    exit_code = cli.main(
+        [
+            "collect",
+            "--url",
+            BASE_URL,
+            "--db",
+            str(tmp_path / "jenkins.sqlite"),
+            "--username",
+            "api-user",
+            "--api-token",
+            "api-token",
+            "all",
+        ],
+        command_runner=runner,
+    )
+
+    # Then it reports clean cancellation instead of allowing a traceback.
+    captured = capsys.readouterr()
+    assert exit_code == 130
+    assert captured.out == ""
+    assert "Interrupted; shutting down cleanly." in captured.err
+    assert "fix the problem and rerun" in captured.err
+    assert "Traceback" not in captured.err

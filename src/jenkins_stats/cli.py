@@ -280,6 +280,10 @@ def main(
         _write_error(exc)
         _write_partial_failure_note()
         return 1
+    except KeyboardInterrupt:
+        _write_interrupted()
+        _write_partial_failure_note()
+        return 130
 
     _present_result(result)
     return 0
@@ -404,6 +408,10 @@ def _write_partial_failure_note() -> None:
         "jobs or builds stored before the failure; fix the problem and rerun the "
         "command to upsert data safely.\n"
     )
+
+
+def _write_interrupted() -> None:
+    sys.stderr.write("Interrupted; shutting down cleanly.\n")
 
 
 def _present_result(result: CliResult) -> None:
