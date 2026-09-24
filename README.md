@@ -66,8 +66,15 @@ uv run jenkins-stats collect builds --all-jobs --lookback 6h
 `--since` and `--lookback` are mutually exclusive. Omit both to import every
 retained build visible through `allBuilds`. Use `--since` when you need a fixed
 cutoff shared across a multi-job run; relative lookbacks are resolved while jobs
-are being scanned. `collect builds --all-jobs` treats the SQLite jobs table as
-the job source of truth and does not query Jenkins for job discovery. Successful
+are being scanned. Job discovery compares the successful Jenkins traversal with
+jobs already in SQLite: visible jobs are stored as active, and previously stored
+jobs that are no longer visible are marked deleted with the observation time.
+Stored-job build collection only targets active jobs. If a later `collect jobs`
+or `collect all` sees the same full name after it was marked deleted, collection
+fails because SQLite rejects resetting `deleted_at`; resolve the reintroduced
+job manually so old build history is not silently merged with a new job lifetime.
+`collect builds --all-jobs` treats the active SQLite jobs table rows as the job
+source of truth and does not query Jenkins for job discovery. Successful
 build-collection runs print the active completion filter after the stored-build
 summary.
 
@@ -106,7 +113,8 @@ Before running against a controller, confirm that:
   If the CLI fails after writes begin, the SQLite database may contain earlier
   job or build writes; fix the cause and rerun the command to upsert safely;
 - Jenkins retention policies limit what can be collected. Deleted or no-longer
-  retained builds are unavailable to the client; and
+  retained builds are unavailable to the client and are not automatically marked
+  deleted in SQLite; and
 - pagination is not a transactional snapshot of Jenkins history. Concurrent build
   completion or deletion can change what later pages return.
 

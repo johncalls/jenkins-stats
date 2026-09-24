@@ -35,12 +35,14 @@ def example_job(
     display_name: str | None = "Example",
     url: str = JOB_URL,
     jenkins_class: str | None = "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+    deleted_at: datetime | None = None,
 ) -> Job:
     return Job(
         full_name=full_name,
         display_name=display_name,
         url=http_url(url),
         jenkins_class=jenkins_class,
+        deleted_at=deleted_at,
     )
 
 
@@ -115,6 +117,7 @@ def test_open_migrated_returns_store_with_complete_schema(tmp_path: Path) -> Non
         assert migration_names(store.db.conn) == [
             "0001_initial_schema",
             "0002_jenkins_classes",
+            "0003_deleted_jobs",
         ]
         store.upsert_job(example_job())
         with pytest.raises(SqliteStoreOperationError, match="upsert build"):
@@ -268,10 +271,11 @@ def test_open_migrated_creates_schema_and_records_sqlite_utils_migration(
     # Given a new store with no schema yet.
     # When the migrated factory creates it.
     with SqliteStore.open_migrated(tmp_path / "jenkins.sqlite") as store:
-        # Then the schema exists and both migrations are recorded once.
+        # Then the schema exists and all migrations are recorded once.
         assert migration_names(store.db.conn) == [
             "0001_initial_schema",
             "0002_jenkins_classes",
+            "0003_deleted_jobs",
         ]
         assert store.table_names() == ["_sqlite_migrations", "builds", "jobs"]
         assert end_time_column_hidden_flag(store) == 2
@@ -288,6 +292,30 @@ def test_upsert_job_is_idempotent(migrated_store: SqliteStore) -> None:
 
     # Then the row is updated in place instead of duplicated.
     assert migrated_store.get_job("folder/example") == updated_job
+
+
+def test_deleted_job_timestamp_cannot_be_reset_by_upsert(
+    migrated_store: SqliteStore,
+) -> None:
+    # Given a stored job that was previously marked deleted.
+    deleted_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    removed = example_job(
+        full_name="folder/removed",
+        url=f"{BASE_URL}job/removed/",
+        deleted_at=deleted_at,
+    )
+    migrated_store.upsert_job(removed)
+
+    # When the same full name is upserted as an active job.
+    with pytest.raises(
+        SqliteStoreOperationError,
+        match="deleted_at cannot be reset for a previously deleted job",
+    ):
+        migrated_store.upsert_job(removed.model_copy(update={"deleted_at": None}))
+
+    # Then the tombstone remains and active job iteration excludes it.
+    assert migrated_store.get_job("folder/removed") == removed
+    assert list(migrated_store.iter_jobs()) == []
 
 
 def test_upsert_build_preserves_pre_epoch_millisecond_values_from_non_utc_inputs(

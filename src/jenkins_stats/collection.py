@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from os import PathLike, fspath
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     from jenkins_stats.models import Build, Job
 
@@ -56,7 +57,7 @@ class Store(Protocol):
         ...
 
     def iter_jobs(self) -> Iterable[Job]:
-        """Yield stored Jenkins jobs."""
+        """Yield active stored Jenkins jobs."""
         ...
 
     def upsert_builds(self, builds: Iterable[Build]) -> None:
@@ -94,6 +95,7 @@ class CollectionResult:
     destination: str | None = None
     skipped_jobs: tuple[SkippedJob, ...] = ()
     completion_filter: str | None = None
+    deleted_job_count: int = 0
 
     def with_destination(self, destination: str | PathLike[str]) -> CollectionResult:
         """Return this result annotated with where data was stored."""
@@ -103,6 +105,7 @@ class CollectionResult:
             destination=fspath(destination),
             skipped_jobs=self.skipped_jobs,
             completion_filter=self.completion_filter,
+            deleted_job_count=self.deleted_job_count,
         )
 
     def output_lines(self) -> tuple[str, ...]:
@@ -110,6 +113,15 @@ class CollectionResult:
         destination = f" in {self.destination}" if self.destination is not None else ""
         summary = (
             f"Stored {self.build_count} builds for {self.job_count} jobs{destination}"
+        )
+        deleted_line = (
+            (f"Marked {self.deleted_job_count} job as deleted",)
+            if self.deleted_job_count == 1
+            else (
+                (f"Marked {self.deleted_job_count} jobs as deleted",)
+                if self.deleted_job_count > 1
+                else ()
+            )
         )
         filter_line = (
             (f"Completion filter: {self.completion_filter}",)
@@ -120,7 +132,7 @@ class CollectionResult:
             f"WARNING: skipped builds for {job.job_full_name}: {job.reason}"
             for job in self.skipped_jobs
         )
-        return (summary, *filter_line, *warnings)
+        return (summary, *deleted_line, *filter_line, *warnings)
 
 
 def collect(
@@ -135,7 +147,7 @@ def collect(
     options = _build_collection_options(page_size, since, lookback)
 
     jobs = list(client.iter_jobs())
-    store.upsert_jobs(jobs)
+    deleted_job_count = _sync_visible_jobs(store, jobs)
     build_count = 0
     skipped_jobs: list[SkippedJob] = []
     for job in jobs:
@@ -149,14 +161,19 @@ def collect(
         build_count=build_count,
         skipped_jobs=tuple(skipped_jobs),
         completion_filter=_completion_filter_description(options),
+        deleted_job_count=deleted_job_count,
     )
 
 
 def collect_jobs(client: JenkinsBuildClient, store: Store) -> CollectionResult:
     """Discover visible Jenkins jobs and store them without retrieving builds."""
     jobs = list(client.iter_jobs())
-    store.upsert_jobs(jobs)
-    return CollectionResult(job_count=len(jobs), build_count=0)
+    deleted_job_count = _sync_visible_jobs(store, jobs)
+    return CollectionResult(
+        job_count=len(jobs),
+        build_count=0,
+        deleted_job_count=deleted_job_count,
+    )
 
 
 def collect_job_builds(
@@ -204,7 +221,30 @@ def collect_stored_job_builds(
     )
 
 
+def _sync_visible_jobs(store: Store, jobs: list[Job]) -> int:
+    visible_full_names = {job.full_name for job in jobs}
+    deleted_at = _utc_now_millisecond()
+    deleted_jobs = [
+        job.model_copy(update={"deleted_at": deleted_at})
+        for job in store.iter_jobs()
+        if job.deleted_at is None and job.full_name not in visible_full_names
+    ]
+    store.upsert_jobs([*jobs, *deleted_jobs])
+    return len(deleted_jobs)
+
+
+def _utc_now_millisecond() -> datetime:
+    now = datetime.now(UTC)
+    return now.replace(microsecond=(now.microsecond // 1_000) * 1_000)
+
+
 def _skip_reason(job: Job) -> SkippedJob | None:
+    if job.deleted_at is not None:
+        return SkippedJob(
+            job.full_name,
+            job.jenkins_class,
+            "job is marked deleted; rediscover jobs to refresh metadata",
+        )
     if job.supports_build_collection:
         return None
     if job.jenkins_class is None:

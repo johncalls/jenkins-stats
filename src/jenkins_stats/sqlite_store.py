@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, Self, cast
 
@@ -134,6 +135,26 @@ def _initial_schema(db: Database) -> None:
 def _jenkins_classes_schema(db: Database) -> None:
     _execute(db, "ALTER TABLE jobs ADD COLUMN jenkins_class TEXT")
     _execute(db, "ALTER TABLE builds ADD COLUMN jenkins_class TEXT")
+
+
+@_MIGRATIONS(name="0003_deleted_jobs")
+def _deleted_jobs_schema(db: Database) -> None:
+    _execute(db, "ALTER TABLE jobs ADD COLUMN deleted_at TEXT")
+    _execute(
+        db,
+        """
+        CREATE TRIGGER jobs_deleted_at_no_reset
+        BEFORE UPDATE OF deleted_at ON jobs
+        FOR EACH ROW
+        WHEN OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL
+        BEGIN
+            SELECT RAISE(
+                ABORT,
+                'deleted_at cannot be reset for a previously deleted job'
+            );
+        END
+        """,
+    )
 
 
 def _create_builds_table(db: Database) -> None:
@@ -277,9 +298,12 @@ class SqliteStore:
         return _job_from_row(row)
 
     def iter_jobs(self) -> Iterable[Job]:
-        """Yield stored jobs ordered by full name."""
+        """Yield active stored jobs ordered by full name."""
         try:
-            for row in self._jobs_table().rows_where(order_by="full_name"):
+            for row in self._jobs_table().rows_where(
+                "deleted_at IS NULL",
+                order_by="full_name",
+            ):
                 yield _job_from_row(row)
         except sqlite3.Error as exc:
             raise SqliteStoreOperationError(
@@ -372,6 +396,9 @@ def _job_row(job: Job) -> dict[str, RowValue]:
         "url": str(job.url),
         "display_name": job.display_name,
         "jenkins_class": job.jenkins_class,
+        "deleted_at": (
+            job.deleted_at.isoformat() if job.deleted_at is not None else None
+        ),
     }
 
 
@@ -381,7 +408,16 @@ def _job_from_row(row: Row) -> Job:
         url=HttpUrl(cast("str", row["url"])),
         display_name=cast("str | None", row["display_name"]),
         jenkins_class=cast("str | None", row["jenkins_class"]),
+        deleted_at=_datetime_from_row_value(row["deleted_at"]),
     )
+
+
+def _datetime_from_row_value(value: RowValue) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return datetime.fromisoformat(value)
+    raise TypeError(f"expected datetime text or NULL, got {type(value).__name__}")
 
 
 def _build_row(build: Build) -> dict[str, RowValue]:

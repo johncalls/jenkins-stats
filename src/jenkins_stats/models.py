@@ -99,12 +99,21 @@ class Job(BaseModel):
     url: HttpUrl
     display_name: str | None = None
     jenkins_class: str | None = None
+    deleted_at: _MillisecondAwareDatetime | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def supports_build_collection(self) -> bool:
         """Whether this job class has a supported build timing source."""
         return self.jenkins_class == "org.jenkinsci.plugins.workflow.job.WorkflowJob"
+
+    @field_validator("deleted_at")
+    @classmethod
+    def normalize_deleted_at(cls, value: datetime | None) -> datetime | None:
+        """Normalize deletion timestamps to UTC at millisecond precision."""
+        if value is None:
+            return None
+        return _require_millisecond_datetime(value)
 
     @property
     def name(self) -> str:

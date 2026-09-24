@@ -27,12 +27,14 @@ def _job(
     full_name: str,
     *,
     jenkins_class: str | None = "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+    deleted_at: datetime | None = None,
 ) -> Job:
     return Job(
         full_name=full_name,
         display_name=full_name,
         url=HttpUrl(f"{BASE_URL}job/{full_name}/"),
         jenkins_class=jenkins_class,
+        deleted_at=deleted_at,
     )
 
 
@@ -91,11 +93,15 @@ class RecordingStore:
         self.events = events
 
     def upsert_job(self, job: Job) -> None:
-        self.jobs.append(job)
+        self.upsert_jobs([job])
 
     def upsert_jobs(self, jobs: Iterable[Job]) -> None:
         job_list = list(jobs)
-        self.jobs.extend(job_list)
+        for job in job_list:
+            self.jobs = [
+                stored for stored in self.jobs if stored.full_name != job.full_name
+            ]
+            self.jobs.append(job)
         if self.events is not None:
             full_names = ",".join(job.full_name for job in job_list)
             self.events.append(f"upsert_jobs:{full_names}")
@@ -104,7 +110,7 @@ class RecordingStore:
         return next((job for job in self.jobs if job.full_name == full_name), None)
 
     def iter_jobs(self) -> Iterator[Job]:
-        yield from self.jobs
+        yield from (job for job in self.jobs if job.deleted_at is None)
 
     def upsert_builds(self, builds: Iterable[Build]) -> None:
         build_list = list(builds)
@@ -131,6 +137,33 @@ def test_collect_jobs_upserts_visible_jobs_without_retrieving_builds() -> None:
     assert store.jobs == [frontend, backend]
     assert store.builds == []
     assert client.build_calls == []
+
+
+def test_collect_jobs_marks_previously_stored_missing_jobs_deleted() -> None:
+    # Given a database with one job that Jenkins still returns and one missing job.
+    retained = _job("frontend")
+    missing = _job("removed")
+    client = RecordingClient([_job("frontend")], {"frontend": []})
+    store = RecordingStore()
+    store.upsert_jobs([retained, missing])
+
+    # When jobs-only collection completes a fresh discovery pass.
+    result = collect_jobs(client, store)
+
+    # Then the visible job is restored and the absent job is marked deleted.
+    assert result == CollectionResult(
+        job_count=1,
+        build_count=0,
+        deleted_job_count=1,
+    )
+    assert store.get_job("frontend") == _job("frontend")
+    removed_job = store.get_job("removed")
+    assert removed_job is not None
+    assert removed_job.deleted_at is not None
+    assert result.output_lines() == (
+        "Stored 0 builds for 1 jobs",
+        "Marked 1 job as deleted",
+    )
 
 
 def test_collect_job_builds_uses_stored_job_without_discovering_all_jobs() -> None:
@@ -222,6 +255,26 @@ def test_collect_stored_job_builds_uses_stored_jobs_without_discovery() -> None:
         ("backend", 100, None, timedelta(hours=6)),
     ]
     assert store.builds == [frontend_build, backend_build]
+
+
+def test_collect_stored_job_builds_excludes_jobs_marked_deleted() -> None:
+    # Given the database contains a deleted job that should not be queried.
+    deleted = _job("removed", deleted_at=datetime(2024, 1, 1, tzinfo=UTC))
+    client = RecordingClient([], {})
+    store = RecordingStore()
+    store.upsert_jobs([deleted])
+
+    # When all stored-job builds are collected.
+    result = collect_stored_job_builds(client, store)
+
+    # Then the deleted job is absent from the collection scope.
+    assert result == CollectionResult(
+        job_count=0,
+        build_count=0,
+        completion_filter="none (all retained builds)",
+    )
+    assert client.build_calls == []
+    assert store.builds == []
 
 
 def test_collect_upserts_visible_jobs_and_builds_without_default_lookback() -> None:
