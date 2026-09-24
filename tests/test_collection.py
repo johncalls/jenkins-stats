@@ -12,6 +12,7 @@ from jenkins_stats.collection import (
     collect,
     collect_job_builds,
     collect_jobs,
+    collect_stored_job_builds,
 )
 from jenkins_stats.models import Build, BuildStatus, Job
 
@@ -60,8 +61,10 @@ class RecordingClient:
         self.builds_by_job = builds_by_job
         self.events = events
         self.build_calls: list[tuple[str, int, datetime | None, timedelta | None]] = []
+        self.job_iteration_count = 0
 
     def iter_jobs(self) -> Iterator[Job]:
+        self.job_iteration_count += 1
         for job in self.jobs:
             if self.events is not None:
                 self.events.append(f"yield_job:{job.full_name}")
@@ -99,6 +102,9 @@ class RecordingStore:
 
     def get_job(self, full_name: str) -> Job | None:
         return next((job for job in self.jobs if job.full_name == full_name), None)
+
+    def iter_jobs(self) -> Iterator[Job]:
+        yield from self.jobs
 
     def upsert_builds(self, builds: Iterable[Build]) -> None:
         build_list = list(builds)
@@ -182,6 +188,40 @@ def test_collect_job_builds_rejects_a_job_missing_from_the_store() -> None:
     with pytest.raises(ValueError, match="Job is not stored: frontend"):
         collect_job_builds(client, RecordingStore(), "frontend")
     assert client.build_calls == []
+
+
+def test_collect_stored_job_builds_uses_stored_jobs_without_discovery() -> None:
+    # Given the database contains the jobs that should be updated.
+    frontend = _job("frontend")
+    backend = _job("backend")
+    frontend_build = _build("frontend", 1)
+    backend_build = _build("backend", 2)
+    client = RecordingClient(
+        [_job("jenkins-only")],
+        {"frontend": [frontend_build], "backend": [backend_build]},
+    )
+    store = RecordingStore()
+    store.upsert_jobs([frontend, backend])
+
+    # When all stored-job builds are collected.
+    result = collect_stored_job_builds(
+        client,
+        store,
+        BuildCollectionOptions(lookback=timedelta(hours=6)),
+    )
+
+    # Then Jenkins job discovery is not used, and only database jobs are updated.
+    assert result == CollectionResult(
+        job_count=2,
+        build_count=2,
+        completion_filter="lookback 6:00:00",
+    )
+    assert client.job_iteration_count == 0
+    assert client.build_calls == [
+        ("frontend", 100, None, timedelta(hours=6)),
+        ("backend", 100, None, timedelta(hours=6)),
+    ]
+    assert store.builds == [frontend_build, backend_build]
 
 
 def test_collect_upserts_visible_jobs_and_builds_without_default_lookback() -> None:

@@ -16,6 +16,7 @@ from pydantic import HttpUrl, ValidationError
 from jenkins_stats.cli_command import (
     CliCommand,
     CollectAllCommand,
+    CollectAllStoredJobBuildsCommand,
     CollectJobBuildsCommand,
     CollectJobsCommand,
     run_cli_command,
@@ -184,7 +185,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     builds_parser.add_argument(
         "job_full_name",
+        nargs="?",
         help="full name of a job previously stored in the database",
+    )
+    builds_parser.add_argument(
+        "--all-jobs",
+        action="store_true",
+        help="collect builds for every job already stored in the database",
     )
     _add_build_collection_options(builds_parser)
     return parser
@@ -319,9 +326,26 @@ def _collect_jobs_command_from_args(args: argparse.Namespace) -> CollectJobsComm
 
 def _collect_job_builds_command_from_args(
     args: argparse.Namespace,
-) -> CollectJobBuildsCommand:
+) -> CollectJobBuildsCommand | CollectAllStoredJobBuildsCommand:
     jenkins_url, database, username, api_token, timeout = _connection_args(args)
     page_size, since, lookback = _build_collection_args(args)
+    job_full_name = _optional_str_arg(args, "job_full_name")
+    all_jobs = _bool_arg(args, "all_jobs")
+    if job_full_name is not None and all_jobs:
+        raise ValueError("Specify either JOB_FULL_NAME or --all-jobs, not both")
+    if all_jobs:
+        return CollectAllStoredJobBuildsCommand(
+            jenkins_url=jenkins_url,
+            database=database,
+            username=username,
+            api_token=api_token,
+            timeout=timeout,
+            page_size=page_size,
+            since=since,
+            lookback=lookback,
+        )
+    if job_full_name is None:
+        raise ValueError("Specify JOB_FULL_NAME or --all-jobs")
     return CollectJobBuildsCommand(
         jenkins_url=jenkins_url,
         database=database,
@@ -331,7 +355,7 @@ def _collect_job_builds_command_from_args(
         page_size=page_size,
         since=since,
         lookback=lookback,
-        job_full_name=_required_str_arg(args, "job_full_name", "JOB_FULL_NAME"),
+        job_full_name=job_full_name,
     )
 
 
@@ -395,6 +419,22 @@ def _str_arg(args: argparse.Namespace, name: str) -> str:
     value = getattr(args, name)
     if not isinstance(value, str):
         raise TypeError(f"Expected {name} to be a string")
+    return value
+
+
+def _optional_str_arg(args: argparse.Namespace, name: str) -> str | None:
+    value = getattr(args, name)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError(f"Expected {name} to be a string or None")
+    return value
+
+
+def _bool_arg(args: argparse.Namespace, name: str) -> bool:
+    value = getattr(args, name)
+    if not isinstance(value, bool):
+        raise TypeError(f"Expected {name} to be a bool")
     return value
 
 

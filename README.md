@@ -49,6 +49,10 @@ uv run jenkins-stats collect jobs
 
 # Collect builds for one job already stored by `collect jobs` or `collect all`.
 uv run jenkins-stats collect builds "folder/deploy-main" --since 2024-01-01T00:00:00Z
+
+# Collect builds for every job already stored in the database, without
+# rediscovering jobs from Jenkins.
+uv run jenkins-stats collect builds --all-jobs --lookback 6h
 ```
 
 `all` and `builds` accept:
@@ -62,8 +66,10 @@ uv run jenkins-stats collect builds "folder/deploy-main" --since 2024-01-01T00:0
 `--since` and `--lookback` are mutually exclusive. Omit both to import every
 retained build visible through `allBuilds`. Use `--since` when you need a fixed
 cutoff shared across a multi-job run; relative lookbacks are resolved while jobs
-are being scanned. Successful build-collection runs print the active completion
-filter after the stored-build summary.
+are being scanned. `collect builds --all-jobs` treats the SQLite jobs table as
+the job source of truth and does not query Jenkins for job discovery. Successful
+build-collection runs print the active completion filter after the stored-build
+summary.
 
 ### Operational prerequisites
 

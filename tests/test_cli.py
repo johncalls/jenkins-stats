@@ -10,6 +10,7 @@ from jenkins_stats import cli
 from jenkins_stats.cli_command import (
     CliCommand,
     CollectAllCommand,
+    CollectAllStoredJobBuildsCommand,
     CollectJobBuildsCommand,
     CollectJobsCommand,
 )
@@ -86,6 +87,9 @@ def test_collect_commands_use_their_expected_scope_and_filters(tmp_path: Path) -
             "2024-01-01T12:30:00Z",
         ],
     )
+    all_jobs_builds_command = _cli_command_from_argv(
+        ["collect", *connection_args, "builds", "--all-jobs", "--lookback", "6h"],
+    )
     all_command = _cli_command_from_argv(
         ["collect", *connection_args, "all", "--lookback", "6h"],
     )
@@ -108,6 +112,16 @@ def test_collect_commands_use_their_expected_scope_and_filters(tmp_path: Path) -
         since=datetime(2024, 1, 1, 12, 30, tzinfo=UTC),
         lookback=None,
         job_full_name="folder/example",
+    )
+    assert all_jobs_builds_command == CollectAllStoredJobBuildsCommand(
+        jenkins_url=HttpUrl(BASE_URL),
+        database=database,
+        username="api-user",
+        api_token="api-token",
+        timeout=30.0,
+        page_size=100,
+        since=None,
+        lookback=timedelta(hours=6),
     )
     assert isinstance(all_command, CollectAllCommand)
     assert all_command.since is None
@@ -330,6 +344,45 @@ def test_collect_command_rejects_out_of_range_cutoff_before_running(
         capsys.readouterr().err
     )
     assert not database.exists()
+
+
+@pytest.mark.parametrize(
+    ("build_args", "message"),
+    [
+        ([], "Specify JOB_FULL_NAME or --all-jobs"),
+        (
+            ["folder/example", "--all-jobs"],
+            "Specify either JOB_FULL_NAME or --all-jobs",
+        ),
+    ],
+)
+def test_collect_builds_requires_exactly_one_job_scope(
+    build_args: list[str],
+    message: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given a builds command with a missing or ambiguous job source.
+    def runner(_command: CliCommand) -> CollectionResult:
+        pytest.fail("runner should not be called")
+
+    # When the CLI command is run, then validation fails before collection.
+    exit_code = cli.main(
+        [
+            "collect",
+            "--url",
+            BASE_URL,
+            "--username",
+            "u",
+            "--api-token",
+            "t",
+            "builds",
+            *build_args,
+        ],
+        command_runner=runner,
+    )
+
+    assert exit_code == 2
+    assert message in capsys.readouterr().err
 
 
 def test_collect_command_requires_url_and_credentials(

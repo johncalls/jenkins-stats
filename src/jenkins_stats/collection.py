@@ -21,6 +21,7 @@ __all__ = [
     "collect",
     "collect_job_builds",
     "collect_jobs",
+    "collect_stored_job_builds",
 ]
 
 
@@ -52,6 +53,10 @@ class Store(Protocol):
 
     def get_job(self, full_name: str) -> Job | None:
         """Return a stored Jenkins job by full name, if present."""
+        ...
+
+    def iter_jobs(self) -> Iterable[Job]:
+        """Yield stored Jenkins jobs."""
         ...
 
     def upsert_builds(self, builds: Iterable[Build]) -> None:
@@ -171,6 +176,30 @@ def collect_job_builds(
     return CollectionResult(
         job_count=1,
         build_count=build_count,
+        completion_filter=_completion_filter_description(effective_options),
+    )
+
+
+def collect_stored_job_builds(
+    client: JenkinsBuildClient,
+    store: Store,
+    options: BuildCollectionOptions = _DEFAULT_BUILD_COLLECTION_OPTIONS,
+) -> CollectionResult:
+    """Collect builds for every job already stored without discovering jobs."""
+    effective_options = _effective_build_collection_options(options)
+    jobs = list(store.iter_jobs())
+    build_count = 0
+    skipped_jobs: list[SkippedJob] = []
+    for job in jobs:
+        skipped = _skip_reason(job)
+        if skipped is not None:
+            skipped_jobs.append(skipped)
+            continue
+        build_count += _collect_job_builds(client, store, job, effective_options)
+    return CollectionResult(
+        job_count=len(jobs),
+        build_count=build_count,
+        skipped_jobs=tuple(skipped_jobs),
         completion_filter=_completion_filter_description(effective_options),
     )
 

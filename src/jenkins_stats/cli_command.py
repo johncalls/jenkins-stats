@@ -11,6 +11,7 @@ from jenkins_stats.collection import (
     collect,
     collect_job_builds,
     collect_jobs,
+    collect_stored_job_builds,
 )
 from jenkins_stats.jenkins import HttpJsonTransport, JenkinsClient
 from jenkins_stats.sqlite_store import SqliteStore
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CliCommand",
     "CollectAllCommand",
+    "CollectAllStoredJobBuildsCommand",
     "CollectJobBuildsCommand",
     "CollectJobsCommand",
     "run_cli_command",
@@ -67,7 +69,17 @@ class CollectJobBuildsCommand(_BuildCollectionCommand):
     job_full_name: str
 
 
-type CliCommand = CollectAllCommand | CollectJobsCommand | CollectJobBuildsCommand
+@dataclass(frozen=True)
+class CollectAllStoredJobBuildsCommand(_BuildCollectionCommand):
+    """Collect builds for every job already stored in the destination database."""
+
+
+type CliCommand = (
+    CollectAllCommand
+    | CollectJobsCommand
+    | CollectJobBuildsCommand
+    | CollectAllStoredJobBuildsCommand
+)
 
 
 def run_cli_command(command: CliCommand) -> CollectionResult:
@@ -98,6 +110,16 @@ def run_cli_command(command: CliCommand) -> CollectionResult:
                     jenkins_client,
                     store,
                     command.job_full_name,
+                    BuildCollectionOptions(
+                        page_size=command.page_size,
+                        since=command.since,
+                        lookback=command.lookback,
+                    ),
+                )
+            case CollectAllStoredJobBuildsCommand():
+                result = collect_stored_job_builds(
+                    jenkins_client,
+                    store,
                     BuildCollectionOptions(
                         page_size=command.page_size,
                         since=command.since,

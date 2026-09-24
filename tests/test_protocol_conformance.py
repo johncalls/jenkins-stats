@@ -74,7 +74,7 @@ if TYPE_CHECKING:
     _fixed_clock_check: Clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
     _recording_clock_check: Clock = RecordingClock(datetime(2026, 1, 1, tzinfo=UTC))
 
-    # The unified store protocol includes job lookup as well as job/build upserts.
+    # The unified store protocol includes job lookup, job iteration, and upserts.
     _collection_store_checks: tuple[Store, ...] = (
         RecordingStore(),
         SqliteStore(Database(memory=True)),
