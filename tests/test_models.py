@@ -91,7 +91,7 @@ def test_build_accepts_every_terminal_status(status: BuildStatus) -> None:
 
 
 def test_job_supports_build_collection_only_for_known_job_classes() -> None:
-    # Given supported, unsupported, and unknown Jenkins job classes.
+    # Given supported, unsupported, unknown, and disabled Jenkins jobs.
     pipeline = Job(
         full_name="folder/pipeline",
         url=http_url("https://jenkins.example/job/folder/job/pipeline/"),
@@ -106,11 +106,18 @@ def test_job_supports_build_collection_only_for_known_job_classes() -> None:
         full_name="folder/unknown",
         url=http_url("https://jenkins.example/job/folder/job/unknown/"),
     )
+    disabled_pipeline = Job(
+        full_name="folder/disabled",
+        url=http_url("https://jenkins.example/job/folder/job/disabled/"),
+        jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowJob",
+        disabled=True,
+    )
 
-    # Then only the explicitly supported class is eligible for build collection.
+    # Then build collection support remains about timing source, not job enabledness.
     assert pipeline.supports_build_collection is True
     assert freestyle.supports_build_collection is False
     assert unknown.supports_build_collection is False
+    assert disabled_pipeline.supports_build_collection is True
 
 
 def test_job_and_build_models_are_immutable() -> None:

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from tests.test_collection import RecordingClient, RecordingStore
     from tests.test_jenkins import (
         ContainerGraphTransport,
+        DisabledJobTransport,
         FakeJenkinsTransport,
         FixedClock,
         MissingApiTransport,
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
 if TYPE_CHECKING:
     _fake_jenkins_transport_check: JsonTransport = FakeJenkinsTransport()
     _container_graph_transport_check: JsonTransport = ContainerGraphTransport()
+    _disabled_job_transport_check: JsonTransport = DisabledJobTransport()
     _paginated_build_transport_check: JsonTransport = PaginatedBuildTransport(
         pages=[],
         start_times_ms={},

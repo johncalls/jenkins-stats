@@ -114,9 +114,9 @@ def test_run_cli_command_collects_through_production_adapters(
         opened_urls,
     )
     assert opened_urls == [
-        "https://jenkins.example/api/json?tree=_class%2CfullName%2CdisplayName%2Curl%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
-        "https://jenkins.example/job/folder/api/json?tree=_class%2CfullName%2CdisplayName%2Curl%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
-        "https://jenkins.example/job/folder/job/example/api/json?tree=_class%2CfullName%2CdisplayName%2Curl%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
+        "https://jenkins.example/api/json?tree=_class%2CfullName%2CdisplayName%2Curl%2Cdisabled%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
+        "https://jenkins.example/job/folder/api/json?tree=_class%2CfullName%2CdisplayName%2Curl%2Cdisabled%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
+        "https://jenkins.example/job/folder/job/example/api/json?tree=_class%2CfullName%2CdisplayName%2Curl%2Cdisabled%2Cjobs%5Bname%2Curl%5D%2Cbuilds%5Bnumber%5D%7B0%2C0%7D",
         "https://jenkins.example/job/folder/job/example/api/json?tree=allBuilds%5B_class%2Cnumber%2Curl%2Ctimestamp%2Cduration%2Cbuilding%2CinProgress%2Cresult%5D%7B0%2C100%7D",
         "https://jenkins.example/job/folder/job/example/1/wfapi/describe",
     ]

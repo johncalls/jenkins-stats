@@ -157,6 +157,17 @@ def _deleted_jobs_schema(db: Database) -> None:
     )
 
 
+@_MIGRATIONS(name="0004_disabled_jobs")
+def _disabled_jobs_schema(db: Database) -> None:
+    _execute(
+        db,
+        """
+        ALTER TABLE jobs ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0
+            CHECK (disabled IN (0, 1))
+        """,
+    )
+
+
 def _create_builds_table(db: Database) -> None:
     _execute(
         db,
@@ -399,6 +410,7 @@ def _job_row(job: Job) -> dict[str, RowValue]:
         "deleted_at": (
             job.deleted_at.isoformat() if job.deleted_at is not None else None
         ),
+        "disabled": int(job.disabled),
     }
 
 
@@ -409,6 +421,7 @@ def _job_from_row(row: Row) -> Job:
         display_name=cast("str | None", row["display_name"]),
         jenkins_class=cast("str | None", row["jenkins_class"]),
         deleted_at=_datetime_from_row_value(row["deleted_at"]),
+        disabled=bool(row["disabled"]),
     )
 
 

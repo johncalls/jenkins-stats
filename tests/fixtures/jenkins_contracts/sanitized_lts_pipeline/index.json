@@ -16,7 +16,7 @@
     ]
   },
   "expected_trees": {
-    "item": "_class,fullName,displayName,url,jobs[name,url],builds[number]{0,0}",
+    "item": "_class,fullName,displayName,url,disabled,jobs[name,url],builds[number]{0,0}",
     "build_page_0_2": "allBuilds[_class,number,url,timestamp,duration,building,inProgress,result]{0,2}",
     "build_page_2_4": "allBuilds[_class,number,url,timestamp,duration,building,inProgress,result]{2,4}",
     "build_page_0_100": "allBuilds[_class,number,url,timestamp,duration,building,inProgress,result]{0,100}"

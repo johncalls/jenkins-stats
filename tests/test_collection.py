@@ -28,6 +28,7 @@ def _job(
     *,
     jenkins_class: str | None = "org.jenkinsci.plugins.workflow.job.WorkflowJob",
     deleted_at: datetime | None = None,
+    disabled: bool = False,
 ) -> Job:
     return Job(
         full_name=full_name,
@@ -35,6 +36,7 @@ def _job(
         url=HttpUrl(f"{BASE_URL}job/{full_name}/"),
         jenkins_class=jenkins_class,
         deleted_at=deleted_at,
+        disabled=disabled,
     )
 
 
@@ -350,14 +352,15 @@ def test_collect_upserts_all_jobs_before_retrieving_builds() -> None:
     ]
 
 
-def test_collect_skips_unsupported_and_unknown_job_classes() -> None:
-    # Given supported, unsupported, and unknown job classes.
+def test_collect_skips_unsupported_unknown_and_disabled_jobs() -> None:
+    # Given supported, unsupported, unknown, and disabled jobs.
     supported = _job("pipeline")
     unsupported = _job("freestyle", jenkins_class="hudson.model.FreeStyleProject")
     unknown = _job("unknown", jenkins_class=None)
+    disabled = _job("disabled", disabled=True)
     client = RecordingClient(
-        [supported, unsupported, unknown],
-        {"pipeline": [], "freestyle": [], "unknown": []},
+        [supported, unsupported, unknown, disabled],
+        {"pipeline": [], "freestyle": [], "unknown": [], "disabled": []},
     )
     store = RecordingStore()
 
@@ -365,11 +368,12 @@ def test_collect_skips_unsupported_and_unknown_job_classes() -> None:
     result = collect(client, store)
 
     # Then skipped jobs are reported without requesting their builds.
-    assert result.job_count == 3
+    assert result.job_count == 4
     assert result.build_count == 0
     assert [job.job_full_name for job in result.skipped_jobs] == [
         "freestyle",
         "unknown",
+        "disabled",
     ]
     assert client.build_calls == [("pipeline", 100, None, None)]
     assert result.output_lines()[1:] == (
@@ -382,6 +386,7 @@ def test_collect_skips_unsupported_and_unknown_job_classes() -> None:
             "WARNING: skipped builds for unknown: Jenkins job class is unknown; "
             "rediscover jobs to refresh metadata"
         ),
+        "WARNING: skipped builds for disabled: job is disabled",
     )
 
 

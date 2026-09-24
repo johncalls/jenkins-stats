@@ -100,6 +100,7 @@ class Job(BaseModel):
     display_name: str | None = None
     jenkins_class: str | None = None
     deleted_at: _MillisecondAwareDatetime | None = None
+    disabled: bool = False
 
     @computed_field  # type: ignore[prop-decorator]
     @property

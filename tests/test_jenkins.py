@@ -217,6 +217,24 @@ class ContainerGraphTransport:
         raise AssertionError(f"Unexpected request: url={url!r}, tree={tree!r}")
 
 
+class DisabledJobTransport:
+    def __init__(self) -> None:
+        self.calls: list[tuple[HttpUrl, str | None]] = []
+
+    def get_json(self, url: HttpUrl, *, tree: str | None = None) -> JsonValue:
+        self.calls.append((url, tree))
+        if url == joined_url(BASE_URL, "api/json"):
+            return {
+                "_class": "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+                "fullName": "disabled-pipeline",
+                "displayName": "Disabled Pipeline",
+                "url": str(JOB_URL),
+                "builds": [],
+                "disabled": True,
+            }
+        raise AssertionError(f"Unexpected request: url={url!r}, tree={tree!r}")
+
+
 class PaginatedBuildTransport:
     def __init__(
         self,
@@ -555,6 +573,26 @@ def test_iter_jobs_reports_missing_root_api_as_non_jenkins() -> None:
         list(client.iter_jobs())
 
 
+def test_iter_jobs_preserves_disabled_job_state() -> None:
+    # Given Jenkins reports a disabled Pipeline job.
+    transport = DisabledJobTransport()
+    client = JenkinsClient(BASE_URL, transport)
+
+    # When jobs are discovered.
+    jobs = list(client.iter_jobs())
+
+    # Then disabled status is part of the public Job model.
+    assert jobs == [
+        Job(
+            full_name="disabled-pipeline",
+            display_name="Disabled Pipeline",
+            url=JOB_URL,
+            jenkins_class="org.jenkinsci.plugins.workflow.job.WorkflowJob",
+            disabled=True,
+        )
+    ]
+
+
 def test_iter_jobs_handles_empty_and_cyclic_containers_with_encoded_paths() -> None:
     # Given a controller under a context path with an empty folder, a cycle, and
     # a multibranch-style job whose URL contains an encoded slash.
@@ -608,6 +646,22 @@ def test_iter_builds_uses_fake_pipeline_timing_and_filters_by_end_time() -> None
     ]
     assert builds[0].end_time == _epoch_ms(4_500)
     assert (joined_url(BUILD_2_URL, "wfapi/describe"), None) not in transport.calls
+
+
+def test_iter_builds_skips_disabled_jobs_before_requesting_build_pages() -> None:
+    # Given a disabled Pipeline job and a transport that records requests.
+    transport = SingleJobBuildTransport(
+        pipeline_build_response(number=1, start_ms=1_000, duration_ms=100)
+    )
+    client = JenkinsClient(BASE_URL, transport)
+    disabled_job = _example_job().model_copy(update={"disabled": True})
+
+    # When builds are requested for the disabled job.
+    builds = list(client.iter_builds(disabled_job))
+
+    # Then no build pages or timing endpoints are queried.
+    assert builds == []
+    assert transport.calls == []
 
 
 def test_iter_builds_resolves_lookback_once_and_scans_past_older_numbers() -> None:

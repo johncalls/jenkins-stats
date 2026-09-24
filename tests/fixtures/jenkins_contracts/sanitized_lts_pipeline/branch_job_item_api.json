@@ -3,5 +3,6 @@
   "fullName": "team-service/feature%2Fcontract-fixture",
   "displayName": "feature/contract-fixture",
   "url": "https://jenkins.example/job/team-service/job/feature%252Fcontract-fixture/",
+  "disabled": false,
   "builds": []
 }

@@ -69,14 +69,15 @@ cutoff shared across a multi-job run; relative lookbacks are resolved while jobs
 are being scanned. Job discovery compares the successful Jenkins traversal with
 jobs already in SQLite: visible jobs are stored as active, and previously stored
 jobs that are no longer visible are marked deleted with the observation time.
-Stored-job build collection only targets active jobs. If a later `collect jobs`
-or `collect all` sees the same full name after it was marked deleted, collection
-fails because SQLite rejects resetting `deleted_at`; resolve the reintroduced
-job manually so old build history is not silently merged with a new job lifetime.
-`collect builds --all-jobs` treats the active SQLite jobs table rows as the job
-source of truth and does not query Jenkins for job discovery. Successful
-build-collection runs print the active completion filter after the stored-build
-summary.
+Visible jobs also store Jenkins disabled status; disabled jobs are skipped for
+build collection. Stored-job build collection only considers active (not deleted)
+jobs. If a later `collect jobs` or `collect all` sees the same full name after it
+was marked deleted, collection fails because SQLite rejects resetting
+`deleted_at`; resolve the reintroduced job manually so old build history is not
+silently merged with a new job lifetime. `collect builds --all-jobs` treats the
+active SQLite jobs table rows as the job source of truth and does not query
+Jenkins for job discovery. Successful build-collection runs print the active
+completion filter after the stored-build summary.
 
 ### Operational prerequisites
 

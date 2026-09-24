@@ -3,5 +3,6 @@
   "fullName": "folder/pipeline-main",
   "displayName": "Pipeline Main",
   "url": "https://jenkins.example/job/folder/job/pipeline-main/",
+  "disabled": false,
   "builds": []
 }

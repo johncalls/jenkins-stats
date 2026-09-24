@@ -3,5 +3,6 @@
   "fullName": "folder/legacy-freestyle",
   "displayName": "Legacy Freestyle",
   "url": "https://jenkins.example/job/folder/job/legacy-freestyle/",
+  "disabled": false,
   "builds": []
 }

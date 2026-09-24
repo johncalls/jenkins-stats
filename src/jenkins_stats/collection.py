@@ -245,6 +245,8 @@ def _skip_reason(job: Job) -> SkippedJob | None:
             job.jenkins_class,
             "job is marked deleted; rediscover jobs to refresh metadata",
         )
+    if job.disabled:
+        return SkippedJob(job.full_name, job.jenkins_class, "job is disabled")
     if job.supports_build_collection:
         return None
     if job.jenkins_class is None:
