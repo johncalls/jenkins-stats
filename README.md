@@ -35,27 +35,55 @@ Common connection options:
 - `--db` / `--database` (default: `./jenkins.sqlite`)
 - `--timeout` in seconds (default: `30`)
 
-Collection targets:
+### `collect all`
+
+Discover visible jobs and collect builds for the jobs that support build
+collection:
 
 ```bash
-# Discover visible jobs and collect every retained build.
 uv run jenkins-stats collect all
-
-# Discover visible jobs and collect recent builds.
 uv run jenkins-stats collect all --lookback 6h
-
-# Discover visible jobs only; no build endpoints are requested.
-uv run jenkins-stats collect jobs
-
-# Collect builds for one job already stored by `collect jobs` or `collect all`.
-uv run jenkins-stats collect builds "folder/deploy-main" --since 2024-01-01T00:00:00Z
-
-# Collect builds for every job already stored in the database, without
-# rediscovering jobs from Jenkins.
-uv run jenkins-stats collect builds --all-jobs --lookback 6h
 ```
 
-`all` and `builds` accept:
+### `collect jobs`
+
+Discover visible jobs only. This updates stored job metadata and deletion state,
+but does not request build endpoints:
+
+```bash
+uv run jenkins-stats collect jobs
+```
+
+### `collect builds`
+
+Collect builds for jobs already present in SQLite. This target has its own
+subcommands:
+
+```text
+jenkins-stats collect [connection options] builds {job,all-jobs} [build options]
+```
+
+#### `collect builds job`
+
+Collect builds for one stored job. `JOB_FULL_NAME` is Jenkins' full job name,
+including folder path segments such as `folder/deploy-main`:
+
+```bash
+uv run jenkins-stats collect builds job "folder/deploy-main" --since 2024-01-01T00:00:00Z
+```
+
+#### `collect builds all-jobs`
+
+Collect builds for every active job already stored in SQLite, without
+rediscovering jobs from Jenkins:
+
+```bash
+uv run jenkins-stats collect builds all-jobs --lookback 6h
+```
+
+### Build options
+
+`collect all`, `collect builds job`, and `collect builds all-jobs` accept:
 
 - `--lookback DURATION`, using `ms`, `s`, `m`, `h`, or `d` units; bare numbers
   are seconds.
@@ -66,18 +94,18 @@ uv run jenkins-stats collect builds --all-jobs --lookback 6h
 `--since` and `--lookback` are mutually exclusive. Omit both to import every
 retained build visible through `allBuilds`. Use `--since` when you need a fixed
 cutoff shared across a multi-job run; relative lookbacks are resolved while jobs
-are being scanned. Job discovery compares the successful Jenkins traversal with
-jobs already in SQLite: visible jobs are stored as active, and previously stored
-jobs that are no longer visible are marked deleted with the observation time.
-Visible jobs also store Jenkins disabled status; disabled jobs are skipped for
-build collection. Stored-job build collection only considers active (not deleted)
-jobs. If a later `collect jobs` or `collect all` sees the same full name after it
-was marked deleted, collection fails because SQLite rejects resetting
-`deleted_at`; resolve the reintroduced job manually so old build history is not
-silently merged with a new job lifetime. `collect builds --all-jobs` treats the
-active SQLite jobs table rows as the job source of truth and does not query
-Jenkins for job discovery. Successful build-collection runs print the active
-completion filter after the stored-build summary.
+are being scanned.
+
+Job discovery compares the successful Jenkins traversal with jobs already in
+SQLite: visible jobs are stored as active, and previously stored jobs that are no
+longer visible are marked deleted with the observation time. Visible jobs also
+store Jenkins disabled status; disabled jobs are skipped for build collection.
+Stored-job build collection only considers active (not deleted) jobs. If a later
+`collect jobs` or `collect all` sees the same full name after it was marked
+deleted, collection fails because SQLite rejects resetting `deleted_at`; resolve
+the reintroduced job manually so old build history is not silently merged with a
+new job lifetime. Successful build-collection runs print the active completion
+filter after the stored-build summary.
 
 ### Operational prerequisites
 

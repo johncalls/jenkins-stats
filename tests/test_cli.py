@@ -61,6 +61,41 @@ def test_collect_all_arguments_default_to_no_completion_filter(
     )
 
 
+def test_collect_builds_help_describes_subcommand_scopes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given the CLI parser.
+    parser = cli.build_parser()
+
+    # When help is requested for the builds collection target.
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["collect", "builds", "--help"])
+
+    # Then the available build scopes are shown as explicit subcommands.
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "{job,all-jobs}" in output
+    assert "collect builds for one stored job" in output
+    assert "collect builds for every stored job" in output
+
+
+def test_collect_builds_job_help_describes_job_full_name(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given the CLI parser.
+    parser = cli.build_parser()
+
+    # When help is requested for the single-job build scope.
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["collect", "builds", "job", "--help"])
+
+    # Then JOB_FULL_NAME is documented on that scope only.
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "JOB_FULL_NAME" in output
+    assert "full name of one job previously stored" in output
+
+
 def test_collect_commands_use_their_expected_scope_and_filters(tmp_path: Path) -> None:
     # Given collection commands with an explicit shared connection configuration.
     database = tmp_path / "jenkins.sqlite"
@@ -82,13 +117,14 @@ def test_collect_commands_use_their_expected_scope_and_filters(tmp_path: Path) -
             "collect",
             *connection_args,
             "builds",
+            "job",
             "folder/example",
             "--since",
             "2024-01-01T12:30:00Z",
         ],
     )
     all_jobs_builds_command = _cli_command_from_argv(
-        ["collect", *connection_args, "builds", "--all-jobs", "--lookback", "6h"],
+        ["collect", *connection_args, "builds", "all-jobs", "--lookback", "6h"],
     )
     all_command = _cli_command_from_argv(
         ["collect", *connection_args, "all", "--lookback", "6h"],
@@ -349,39 +385,37 @@ def test_collect_command_rejects_out_of_range_cutoff_before_running(
 @pytest.mark.parametrize(
     ("build_args", "message"),
     [
-        ([], "Specify JOB_FULL_NAME or --all-jobs"),
-        (
-            ["folder/example", "--all-jobs"],
-            "Specify either JOB_FULL_NAME or --all-jobs",
-        ),
+        ([], "the following arguments are required"),
+        (["folder/example"], "invalid choice"),
     ],
 )
-def test_collect_builds_requires_exactly_one_job_scope(
+def test_collect_builds_requires_a_build_scope_subcommand(
     build_args: list[str],
     message: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # Given a builds command with a missing or ambiguous job source.
+    # Given a builds command with a missing or legacy job source.
     def runner(_command: CliCommand) -> CollectionResult:
         pytest.fail("runner should not be called")
 
-    # When the CLI command is run, then validation fails before collection.
-    exit_code = cli.main(
-        [
-            "collect",
-            "--url",
-            BASE_URL,
-            "--username",
-            "u",
-            "--api-token",
-            "t",
-            "builds",
-            *build_args,
-        ],
-        command_runner=runner,
-    )
+    # When the CLI command is run, then argparse fails before collection.
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(
+            [
+                "collect",
+                "--url",
+                BASE_URL,
+                "--username",
+                "u",
+                "--api-token",
+                "t",
+                "builds",
+                *build_args,
+            ],
+            command_runner=runner,
+        )
 
-    assert exit_code == 2
+    assert exc_info.value.code == 2
     assert message in capsys.readouterr().err
 
 
